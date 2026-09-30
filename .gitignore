@@ -1,0 +1,14 @@
+node_modules/
+**/node_modules/
+.env
+.env.*
+!.env.example
+.expo/
+**/.expo/
+dist/
+build/
+coverage/
+tmp/
+*.log
+*.tsbuildinfo
+
