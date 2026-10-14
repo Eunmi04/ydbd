@@ -1,6 +1,6 @@
 # 같이타요 모바일 앱
 
-택시 동승 방 생성·참여, 포인트 예치, 탑승 확인, 요금 정산을 시연하는 Expo 앱입니다. 실제 서버, 결제, 지도 API, 블록체인은 연결하지 않았습니다.
+택시 동승과 TEST 크레딧 정산을 시연하는 Expo 앱입니다. 환경변수를 설정하면 Supabase Auth·방·예치·정산 RPC와 원장 조회를 사용합니다. 실제 결제, 지도 API, 블록체인은 연결하지 않았습니다. SQL은 아직 실제 Supabase 프로젝트에 적용·검증되지 않았습니다.
 
 ## 실행
 
@@ -11,9 +11,11 @@ npm install
 npm start
 ```
 
+Supabase를 사용하려면 `.env.example`을 `mobile/.env`로 복사해 프로젝트 URL과 공개 anon/publishable 키를 채우고 앱을 다시 시작하세요. `EXPO_PUBLIC_KAKAO_MAP_KEY`는 지도 API를 연결할 때 사용할 자리표시자이며 현재 화면은 텍스트 기반 미리보기입니다. `service_role` 키는 절대 넣지 않습니다. DB에는 `supabase/migrations/`의 `001`~`011` 파일을 순서대로 적용하고, 개발용 네 계정은 [테스트 데이터 절차](../docs/test-data.md)를 따르세요. 두 Supabase 환경변수가 없으면 아래의 로컬 시연 모드로 실행됩니다. 실제 DB 검증 순서는 [통합 테스트](../docs/phase6-integration-test.md)에 있습니다.
+
 Android 에뮬레이터가 준비되어 있으면 `npm run android`로 실행할 수 있습니다. 실제 Android 기기에서는 Expo Go에서 개발 서버의 QR 코드를 스캔하세요.
 
-## 시연 계정과 순서
+## 로컬 시연 모드 계정과 순서
 
 - 이메일: `minji@example.com`
 - 비밀번호: `1234`
@@ -31,10 +33,11 @@ Android 에뮬레이터가 준비되어 있으면 `npm run android`로 실행할
 - `src/app`: Expo Router 화면
 - `src/components/ui.tsx`: 공통 화면·버튼·카드·아바타 등
 - `src/services/mockService.ts`: 초기 데이터, 인증·예치·정산 규칙
-- `src/state/AppContext.tsx`: 메모리 상태와 사용자 동작
+- `src/state/AppContext.tsx`: Supabase 데이터 조회·RPC와 환경변수 없는 경우의 로컬 시연 상태
+- `src/services/capstoneApi.ts`: 변경 요청 ID 재사용 및 크레딧 요약 조회
 - `src/types.ts`: 도메인 타입
 
-나중에 Supabase로 교체할 때는 `mockService`와 `AppContext`의 데이터 처리 부분을 API 호출로 변경하면 화면 컴포넌트는 대부분 유지할 수 있습니다.
+Supabase 모드의 지급은 앱 버튼이 아니라 개발용 seed SQL로만 합니다. 예치·반환·차감은 RPC로 작성했지만 실제 DB 미적용이므로 동작을 아직 보증하지 않습니다. 로컬 시연 모드의 포인트·정산은 기존 mock 데이터일 뿐 서버 데이터와 연결되지 않습니다.
 
 ```bash
 npm run typecheck

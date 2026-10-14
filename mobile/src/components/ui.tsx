@@ -48,9 +48,9 @@ export function TextField({ label, value, onChangeText, placeholder, keyboardTyp
 export function RoomCard({ room, onPress }: { room: Room; onPress: () => void }) {
   const deposit = mockService.depositFor(room);
   return <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.card, styles.roomCard, pressed && styles.pressed]}>
-    <View style={styles.roomTop}><View style={[styles.statusPill, room.status === 'confirmed' && styles.statusConfirmed, room.status === 'settled' && styles.statusSettled]}><Text style={styles.statusText}>{room.status === 'recruiting' ? '모집 중' : room.status === 'confirmed' ? '출발 확정' : '정산 완료'}</Text></View><Text style={styles.roomTime}>{shortDate(room.departureAt)}</Text></View>
+    <View style={styles.roomTop}><View style={[styles.statusPill, room.status === 'confirmed' && styles.statusConfirmed, room.status === 'settled' && styles.statusSettled]}><Text style={styles.statusText}>{room.status === 'recruiting' ? '모집 중' : room.status === 'confirmed' ? '출발 확정' : room.status === 'settled' ? '정산 완료' : '진행 중'}</Text></View><Text style={styles.roomTime}>{shortDate(room.departureAt)}</Text></View>
     <Text style={styles.roomRoute}>{room.departure} <Text style={styles.roomArrow}>→</Text> {room.destination}</Text>
-    <View style={styles.roomBottom}><Text style={styles.roomMeta}>함께 타는 사람 {room.members.length}/{room.maxMembers}</Text><Text style={styles.roomDeposit}>{money(deposit)}P 예치</Text></View>
+    <View style={styles.roomBottom}><Text style={styles.roomMeta}>함께 타는 사람 {room.dbStatus && !room.memberCountKnown ? '?' : room.members.length}/{room.maxMembers}</Text><Text style={styles.roomDeposit}>{money(deposit)}P {room.dbStatus ? '예치 예상' : '예치'}</Text></View>
   </Pressable>;
 }
 

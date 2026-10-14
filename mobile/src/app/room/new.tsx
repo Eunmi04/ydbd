@@ -9,7 +9,7 @@ import { colors, money } from '../../theme';
 const days = Array.from({ length: 7 }, (_, index) => { const date = new Date(); date.setDate(date.getDate() + index + 1); return date; });
 
 export default function NewRoom() {
-  const { createRoom } = useApp();
+  const { createRoom, mode } = useApp();
   const [departure, setDeparture] = useState('');
   const [destination, setDestination] = useState('');
   const [selectedDay, setSelectedDay] = useState(0);
@@ -18,15 +18,18 @@ export default function NewRoom() {
   const [maxMembers, setMaxMembers] = useState(4);
   const [fare, setFare] = useState('12000');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const numericFare = Number(fare.replace(/,/g, '')) || 0;
   const deposit = mockService.depositFor({ estimatedFare: numericFare, maxMembers });
-  const submit = () => {
+  const submit = async () => {
+    if (busy) return;
     const h = Number(hour); const m = Number(minute);
     if (!Number.isInteger(h) || h < 0 || h > 23 || !Number.isInteger(m) || m < 0 || m > 59) { setError('시간은 00~23시, 분은 00~59로 입력해 주세요.'); return; }
     const date = new Date(days[selectedDay]); date.setHours(h, m, 0, 0);
-    try { const id = createRoom({ departure, destination, departureAt: date.toISOString(), maxMembers, estimatedFare: numericFare }); router.replace({ pathname: '/room/[id]', params: { id } }); } catch (cause) { setError(cause instanceof Error ? cause.message : '방을 만들지 못했습니다.'); }
+    setBusy(true);
+    try { const id = await createRoom({ departure, destination, departureAt: date.toISOString(), maxMembers, estimatedFare: numericFare }); router.replace({ pathname: '/room/[id]', params: { id } }); } catch (cause) { setError(cause instanceof Error ? cause.message : '방을 만들지 못했습니다.'); } finally { setBusy(false); }
   };
-  return <Page back eyebrow="CREATE A ROOM" title="동승 방 만들기" subtitle="이동 일정과 경로를 알려주세요." footer={<AppButton label="방 만들기" onPress={submit} />}>
+  return <Page back eyebrow="CREATE A ROOM" title="동승 방 만들기" subtitle="이동 일정과 경로를 알려주세요." footer={<AppButton label={busy ? '방 만드는 중…' : '방 만들기'} onPress={submit} disabled={busy} />}>
     <TextField label="출발지" value={departure} onChangeText={setDeparture} placeholder="예: 삼송역" />
     <TextField label="목적지" value={destination} onChangeText={setDestination} placeholder="예: 중부대학교" />
     <MapPreview departure={departure || '출발지'} destination={destination || '목적지'} />
@@ -34,7 +37,7 @@ export default function NewRoom() {
     <View style={styles.timeRow}><View style={{ flex: 1 }}><TextField label="시" value={hour} onChangeText={setHour} placeholder="18" keyboardType="number-pad" /></View><Text style={styles.colon}>:</Text><View style={{ flex: 1 }}><TextField label="분" value={minute} onChangeText={setMinute} placeholder="30" keyboardType="number-pad" /></View></View>
     <View style={styles.group}><Text style={styles.label}>최대 인원</Text><View style={styles.memberList}>{[2, 3, 4].map((count) => <Pressable key={count} onPress={() => setMaxMembers(count)} style={({ pressed }) => [styles.memberChip, maxMembers === count && styles.memberSelected, pressed && styles.pressed]}><Text style={[styles.memberText, maxMembers === count && styles.memberTextSelected]}>{count}명</Text></Pressable>)}</View></View>
     <TextField label="예상 택시 요금" value={fare} onChangeText={setFare} placeholder="예: 12000" keyboardType="number-pad" hint="실제 요금은 탑승 후 정산 화면에서 입력해요." />
-    <Card style={styles.estimate}><InfoRow label="예상 택시 요금" value={`${money(numericFare)}원`} /><InfoRow label="최대 참여 인원" value={`${maxMembers}명`} /><View style={styles.divider} /><InfoRow label="1인 예치 포인트" value={`${money(deposit)}P`} strong /><Text style={styles.estimateHint}>예상 1인 부담액을 올림하며 최소 예치액은 5,000P예요.</Text></Card>
+    <Card style={styles.estimate}><InfoRow label="예상 택시 요금" value={`${money(numericFare)}원`} /><InfoRow label="최대 참여 인원" value={`${maxMembers}명`} /><View style={styles.divider} /><InfoRow label="1인 예치 테스트 크레딧" value={`${money(deposit)}P`} strong /><Text style={styles.estimateHint}>{mode === 'supabase' ? '방 생성 때는 예치하지 않습니다. 준비 버튼을 누르면 서버가 TEST 크레딧을 예치합니다.' : '예상 1인 부담액을 올림하며 최소 예치액은 5,000P예요.'}</Text></Card>
     {error ? <ErrorNotice message={error} /> : null}
   </Page>;
 }
