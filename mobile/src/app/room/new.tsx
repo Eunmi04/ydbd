@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AppButton, Card, ErrorNotice, InfoRow, MapPreview, Page, TextField } from '../../components/ui';
+import { AppButton, Card, ErrorNotice, InfoRow, Page, TextField } from '../../components/ui';
+import KakaoMap from '../../components/KakaoMap.web';
 import { mockService } from '../../services/mockService';
 import { useApp } from '../../state/AppContext';
 import { colors, money } from '../../theme';
@@ -32,7 +33,7 @@ export default function NewRoom() {
   return <Page back eyebrow="CREATE A ROOM" title="동승 방 만들기" subtitle="이동 일정과 경로를 알려주세요." footer={<AppButton label={busy ? '방 만드는 중…' : '방 만들기'} onPress={submit} disabled={busy} />}>
     <TextField label="출발지" value={departure} onChangeText={setDeparture} placeholder="예: 삼송역" />
     <TextField label="목적지" value={destination} onChangeText={setDestination} placeholder="예: 중부대학교" />
-    <MapPreview departure={departure || '출발지'} destination={destination || '목적지'} />
+    <KakaoMap departure={departure || '출발지'} destination={destination || '목적지'} />
     <View style={styles.group}><Text style={styles.label}>출발 날짜</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayList}>{days.map((day, index) => <Pressable key={index} onPress={() => setSelectedDay(index)} style={({ pressed }) => [styles.chip, selectedDay === index && styles.chipSelected, pressed && styles.pressed]}><Text style={[styles.chipText, selectedDay === index && styles.chipTextSelected]}>{index === 0 ? '내일' : `${day.getMonth() + 1}/${day.getDate()}`}</Text></Pressable>)}</ScrollView></View>
     <View style={styles.timeRow}><View style={{ flex: 1 }}><TextField label="시" value={hour} onChangeText={setHour} placeholder="18" keyboardType="number-pad" /></View><Text style={styles.colon}>:</Text><View style={{ flex: 1 }}><TextField label="분" value={minute} onChangeText={setMinute} placeholder="30" keyboardType="number-pad" /></View></View>
     <View style={styles.group}><Text style={styles.label}>최대 인원</Text><View style={styles.memberList}>{[2, 3, 4].map((count) => <Pressable key={count} onPress={() => setMaxMembers(count)} style={({ pressed }) => [styles.memberChip, maxMembers === count && styles.memberSelected, pressed && styles.pressed]}><Text style={[styles.memberText, maxMembers === count && styles.memberTextSelected]}>{count}명</Text></Pressable>)}</View></View>

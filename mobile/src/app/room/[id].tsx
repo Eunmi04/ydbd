@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
-import { AppButton, Avatar, Card, EmptyState, ErrorNotice, Header, InfoRow, MapPreview, Page, PointBadge } from '../../components/ui';
+import { AppButton, Avatar, Card, EmptyState, ErrorNotice, Header, InfoRow, Page, PointBadge } from '../../components/ui';
+import KakaoMap from '../../components/KakaoMap.web';
 import { useApp } from '../../state/AppContext';
 import { mockService } from '../../services/mockService';
 import { colors, money, shortDate } from '../../theme';
@@ -63,7 +64,7 @@ export default function RoomDetail() {
                 : <AppButton label="현재 참여할 수 없는 방이에요" onPress={() => {}} disabled />
     : room.status === 'settled' ? <AppButton label="홈으로 돌아가기" onPress={() => router.replace('/(tabs)')} /> : !member ? <AppButton label={`참여하고 ${money(deposit)}P 예치하기`} onPress={join} disabled={room.status !== 'recruiting'} /> : room.status === 'recruiting' ? <><AppButton label="참여 완료 · 포인트 예치됨" onPress={() => {}} disabled />{isHost ? <AppButton label="방 확정하기" onPress={confirm} variant="orange" /> : null}</> : <AppButton label="탑승 확인하기" onPress={() => router.push({ pathname: '/ride/[id]/boarding', params: { id: room.id } })} />;
   return <Page back eyebrow="RIDE DETAIL" title={`${room.departure}에서\n${room.destination}까지`} subtitle={`${shortDate(room.departureAt)} 출발 · ${room.status === 'recruiting' ? '동승자 모집 중' : room.status === 'confirmed' ? '출발 확정' : room.status === 'settled' ? '정산 완료' : '진행 중'}`} footer={footer}>
-    <MapPreview departure={room.departure} destination={room.destination} />
+    <KakaoMap departure={room.departure} destination={room.destination} />
     <Card><InfoRow label="출발지" value={room.departure} /><InfoRow label="목적지" value={room.destination} /><InfoRow label="출발 시간" value={shortDate(room.departureAt)} /><InfoRow label="현재 인원" value={`${room.dbStatus && !room.memberCountKnown ? '?' : room.members.length} / ${room.maxMembers}명`} /></Card>
     <Header title="함께 타는 사람" />
     <Card style={{ paddingVertical: 4 }}>{room.dbStatus && !room.memberCountKnown ? <Text style={styles.memberStatus}>참여 후 동승자 목록을 볼 수 있어요.</Text> : room.members.map((item, index) => { const participant = data.users.find((person) => person.id === item.userId); if (!participant) return null; return <View key={item.userId} style={[styles.member, index < room.members.length - 1 && styles.border]}><Avatar user={participant} size={37} /><Text style={styles.memberName}>{participant.nickname}{participant.id === room.hostId ? <Text style={styles.host}>  방장</Text> : null}</Text><Text style={styles.memberStatus}>{item.boardedStatus === 'NO_SHOW' ? '미탑승' : item.boarded ? '탑승 완료' : item.ready ? '준비 완료' : '참여 중'}</Text></View>; })}</Card>
