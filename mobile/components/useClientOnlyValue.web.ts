@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 export function useClientOnlyValue<S, C>(server: S, client: C): S | C {
   const [value, setValue] = useState<S | C>(server);
   useEffect(() => {
+    // The state switch is intentional: this hook prevents an SSR/client value mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setValue(client);
   }, [client]);
 

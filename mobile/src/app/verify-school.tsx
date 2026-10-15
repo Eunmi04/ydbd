@@ -17,7 +17,7 @@ export default function VerifySchool() {
     finally { setBusy(false); }
   };
   return <Page eyebrow="SCHOOL VERIFICATION" title="학교 이메일을 인증해 주세요" subtitle="중부대학교 학생 인증 후 서비스를 이용할 수 있습니다.">
-    <Card><Text>중부대학교 · @jmail.ac.kr</Text><Text>{state.user?.email}</Text><Text>인증 대기</Text></Card>
+    <Card><Text>중부대학교 · @jmail.ac.kr</Text><Text>{state.status === 'pending' ? state.email : state.user?.email}</Text><Text>인증 대기 · 코드 확인 후에도 이 화면이면 서버의 학교 인증 상태 반영이 필요합니다.</Text></Card>
     <AppButton label="인증 메일 보내기 / 다시 보내기" disabled={busy || !configured} onPress={() => void perform(async () => { await sendCode(); setNotice('인증 메일을 보냈습니다. 메일의 숫자 코드를 입력해 주세요.'); })} />
     <TextField label="인증 코드" value={code} onChangeText={setCode} placeholder="메일의 숫자 코드" keyboardType="number-pad" />
     <AppButton label="인증 확인" disabled={busy || !configured || !code.trim()} onPress={() => void perform(async () => { try { await verifyCode(code); } finally { setCode(''); } })} />

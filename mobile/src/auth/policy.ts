@@ -7,12 +7,15 @@ export const normalizeEmail = (email: string) => email.trim().toLowerCase();
 export const isSchoolEmail = (email: string) => /^[^\s@]+@jmail\.ac\.kr$/i.test(email.trim());
 export function validateSignup(input: SignupInput): string | null {
   if (!input.nickname.trim()) return '닉네임을 입력해 주세요.';
+  if (input.nickname.trim().length > 40) return '닉네임은 40자 이내로 입력해 주세요.';
   if (!isSchoolEmail(input.email)) return '중부대학교 @jmail.ac.kr 이메일을 입력해 주세요.';
   if (!input.password.trim()) return '비밀번호를 입력해 주세요.';
+  if (input.password.length < 6) return '비밀번호는 6자 이상 입력해 주세요.';
   if (!/^\+?[0-9]{9,15}$/.test(input.phone.replace(/[\s()-]/g, ''))) return '전화번호를 확인해 주세요.';
   return null;
 }
 export function accessFor(state: AuthState) {
+  if (state.status === 'pending') return 'unverified';
   if (state.status !== 'ready') return state.status;
   if (!state.user) return 'guest';
   // Expiration is display-only: only the server can lift a suspension.

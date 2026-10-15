@@ -1,83 +1,50 @@
-# 회원·인증 연동 안내
+# 회원·인증 통합 PR 안내
 
-작업 브랜치: feature/login. 최신 main의 방·지도 코드를 기준으로 작업했습니다.
+## 현재 구성
 
-## 현재 가능한 것과 제한
+feature/login에 origin/main의 방·지도·지갑·정산 및 Supabase 코드(2026-10-15 기준)를 병합했습니다. 기존 migrations 001~011과 RPC를 그대로 사용합니다.
 
-- 로컬 개발 서버에서는 로그인 화면의 **개발용 둘러보기**로 기존 u1 시연 데이터에 접근할 수 있습니다. AuthState는 비로그인 상태로 유지하며 학교 인증 완료를 설정하지 않습니다.
-- 둘러보기는 __DEV__이고 인증 서버가 미연결이며 비로그인 상태일 때만 가능합니다. 실제 미인증/정지 사용자는 이 경로를 사용할 수 없습니다. 모든 화면 상단과 마이페이지에 시연임을 표시합니다.
-- 새로고침 또는 둘러보기 종료로 접근 권한이 사라집니다. 시연 데이터는 기존 메모리 mockService를 사용합니다. 서버 연결 시 둘러보기는 자동 비활성화됩니다.
+- AuthProvider가 회원·학교 인증·정지 상태를 관리하고 AppProvider에 접근 허용된 사용자 ID를 전달합니다.
+- useApp의 방·지갑·정산 함수와 mode, isAuthenticated, isLoading 인터페이스는 유지합니다. login/register는 useAuth로 이동했습니다.
+- 사용자 변경·로그아웃·둘러보기 종료 시 AppProvider를 새로 생성해 이전 사용자 데이터가 섞이지 않도록 합니다.
+- useAuth의 access는 loading/error/guest/unverified/suspended/allowed입니다.
+- 학교 인증은 서버 profiles.verification_status=VERIFIED와 Auth 이메일 확인, 정확한 @jmail.ac.kr 도메인을 모두 요구합니다. 클라이언트에서 VERIFIED를 쓰지 않습니다.
+- ACTIVE 이외 계정은 차단합니다. 정지 종료 시각이 없어도 임의 해제하지 않습니다.
+- 학교 코드 확인 전 가입 상태(pending)는 로그인 세션이 아닙니다. 방/지갑/정산에 접근할 수 없습니다.
 
-- 로그인/회원가입 UI, 학교 이메일 숫자 코드 입력 UI, 정지 기간 안내, 공통 경로 보호.
-- 실제 백엔드는 미정입니다. auth/client.ts는 명시적으로 configured=false이며 인증을 성공시키지 않습니다.
-- 실제 계정 생성, 메일 발송, 코드 검증, 로그인 유지, 서버 로그아웃은 서버 연결 후 구현/통합 테스트해야 합니다.
-- 로그인 이메일도 학교 이메일을 사용하는 현재 UI 구조입니다. 별도 일반 이메일이 필요해지면 팀에서 계약을 변경하세요.
-- 수집 정보: 닉네임, 중부대학교 @jmail.ac.kr 이메일, 비밀번호, 필수 전화번호. 전화번호 소유 확인은 별개입니다.
-- 비밀번호 정책, 코드 길이/유효시간/재발송 제한은 서버 선정 후 확정합니다. 현재 코드는 비밀번호 필수 여부만 검사합니다.
-- 학교 로고 파일이 없으므로 임의 문양 대신 학교 이름과 도메인을 표시합니다.
+## 설정과 실행
 
-## 서버 어댑터 계약
-
-src/auth/types.ts의 AuthClient를 구현하고 src/auth/client.ts에서 연결하세요. 실제 연결 전 configured=true로 바꾸지 마세요.
-
-| 메서드 | 역할 |
-| --- | --- |
-| restoreSession | 저장된 세션을 서버에 검증하고 최신 AuthUser 또는 null 반환 |
-| login | 이메일/비밀번호로 로그인, 서버가 확인한 AuthUser 반환 |
-| register | 필수 정보 등록, 가입 세션과 미인증 AuthUser 반환. 가입만으로 학교 인증 완료 금지 |
-| logout | 서버 세션 폐기 및 기기에 저장한 세션 제거 |
-| getMe | 현재 세션의 내 정보·학교 인증·정지 상태 조회. 세션 만료는 null, 통신 실패는 예외 |
-| sendSchoolCode | 세션 사용자 학교 이메일에 코드 발송. 실패는 예외 |
-| verifySchoolCode | 서버에서 코드 검증. 성공 후 UI는 getMe로 상태를 다시 조회 |
-
-이메일은 trim/lowercase 정규화합니다. 학교 도메인을 서버에서도 정확히 검사하세요. 코드는 서버에서 생성·만료·횟수 제한·일회성 사용·재발송 제한을 적용하고 세션 사용자와 결합해야 합니다.
-
-세션 저장은 어댑터 책임입니다. 웹/네이티브 저장 방식은 백엔드 선정 후 정하고 비밀번호·인증 코드를 영구 저장하지 마세요. 서버 관리키나 메일 발송키를 EXPO_PUBLIC_* 또는 앱 번들에 넣지 마세요. 사용자 응답에 비밀번호/토큰을 넣지 않고 응답 구조를 검증하세요. 원시 서버 오류나 인증 입력값을 로그에 남기지 마세요.
-
-## 팀원에게 전달할 정보
-
-- useAuth(): state, access, refresh, logout.
-- state.user.id: 서버의 안정적인 사용자 ID. 클라이언트 시간으로 만들지 않습니다.
-- state.user.schoolVerification: unverified / pending / verified.
-- state.user.accountStatus: active / suspended.
-- state.user.suspendedUntil: ISO 날짜 문자열 또는 null.
-- access: loading / error / guest / unverified / suspended / allowed.
-- 기존 useApp().user.id와 data.currentUserId는 접근 허용된 인증 사용자와 연결됩니다.
-- 기존 data.users에는 비밀번호·전화번호·세션 토큰을 넣지 않습니다.
-- 기존 방의 userId/hostId, 거래와 정산의 userId 구조는 유지합니다. u1 등의 시연 ID는 실제 서버 ID와 자동 대응되지 않습니다.
-- 신규 사용자 잔액이나 시연 방 참여를 인증 코드가 자동 생성하지 않습니다. 해당 담당자가 서버 데이터와 연결해야 합니다.
-- 방·지도·지갑·정산 알고리즘은 변경하지 않았습니다.
-
-## 접근 규칙
-
-학교 미인증은 인증 안내, 정지 상태는 정지 안내로 보냅니다. 정지 확인이 학교 인증보다 우선합니다. 로그아웃/복원 중/오류 상태는 보호된 경로로 직접 접속할 수 없습니다. Stack.Protected로 웹 직접 URL 및 뒤로 가기를 보호합니다.
-
-정지 만료일은 안내용입니다. 기기 시간을 변경하거나 종료일이 지나더라도 서버가 active를 반환하기 전에는 허용하지 않습니다. 앱 복귀 시 서버 상태를 재조회합니다.
-
-클라이언트 경로 보호는 서버 권한 검사를 대체하지 않습니다. 방 참여·결제 등 모든 API에서 세션과 사용자 상태를 다시 검사해야 합니다. 서버 선택 후 정지 실시간 반영 및 토큰 갱신 정책도 정해야 합니다.
-
-## 실행 및 검증
+mobile/.env에 프로젝트 URL과 공개 키를 넣습니다. EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY 또는 기존 팀 코드의 EXPO_PUBLIC_SUPABASE_ANON_KEY를 지원합니다. 관리자 키는 넣지 마세요. 지도 키도 mobile/.env에 둡니다. 실제 환경변수 파일은 Git에서 제외됩니다.
 
 ```powershell
 cd mobile
 npm ci
 npm run web
 npm run typecheck
-node --test tests/auth.test.cjs
-npx expo lint
+npm run lint
+npm run test:auth
 ```
 
-서버가 없는 현재 앱에서 로그인/회원가입은 준비 중이며 버튼은 비활성화됩니다. 보호 화면에 직접 접근하면 로그인으로 이동해야 합니다.
+Supabase 미설정 로컬 개발에서는 로그인 화면의 '개발용 둘러보기'로 기존 u1 시연 데이터를 사용합니다. 실제 로그인/학교 인증이 아니며 배포 빌드, 서버 연결 상태, 실제 미인증/정지 사용자는 이 경로를 이용할 수 없습니다.
 
-서버 연결 후 추가 검증: 가입 후 미인증 이동, 실제 메일 코드 검증(만료/오류/재사용 포함), 새로고침 세션 복원, 만료 세션 해제, 로그아웃 후 뒤로 가기 차단, 정지 상태/만료일 재조회, 통신 실패 시 보호 화면 차단. 실제 전화번호·비밀번호 대신 전용 테스트 계정을 사용하세요.
+## Supabase 연결
 
-참고: [Expo 보호 경로](https://docs.expo.dev/router/advanced/protected/), [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/).
+팀의 services/supabaseClient.ts를 재사용합니다. supabaseAdapter.ts는 signUp/signInWithPassword/getUser/resend/verifyOtp/signOut을 연결합니다. 세션 저장과 갱신은 기존 SDK 설정에 맡깁니다. 로그인/복원 후 서버의 본인 profiles 행을 조회합니다.
 
-## 이번 변경 검증 결과
+Confirm Email을 유지하고 가입 확인 메일 템플릿에 숫자 토큰을 넣어야 합니다. 가입 성공 시 세션이 없으면 이메일 코드 입력 화면으로 이동합니다. 전화번호는 필수 입력이며 현재 가입 사용자 메타데이터에 전달합니다. 공개 동승자 목록에는 전달하지 않습니다. 메타데이터의 인증·권한 값은 신뢰하지 않습니다.
 
-- TypeScript 검사 통과.
-- 인증 정책/미연결 어댑터 테스트 6개 통과 (npm run test:auth).
-- 신규 인증 및 수정한 화면/상태 코드의 ESLint 검사 통과.
-- Expo 웹 정적 빌드 통과.
-- 전체 lint는 기존 EditScreenInfo.tsx, useClientOnlyValue.web.ts, KakaoMap.web.tsx 오류와 기존 미사용 코드 경고 때문에 실패. 해당 팀원 영역은 수정하지 않았습니다.
-- 실제 서버 인증, 이메일 전달, 세션 영구 저장 및 브라우저 상호작용 테스트는 수행하지 않았습니다.
+## 병합 전 팀 검토 및 남은 작업
+
+이 PR은 실제 Supabase/SMTP 통합 테스트 전의 초안입니다.
+
+1. 기존 migrations 001~011의 실제 프로젝트 적용 여부와 환경변수 설정 확인.
+2. 학교 이메일 실제 확인 이후 profiles.verification_status를 서버에서 갱신하는 트리거/RPC 구현. 현재 기존 main 스키마에는 이 연결이 없어 코드 확인만으로 서비스 접근이 허용되지 않습니다.
+3. 전화번호 전용 저장 정책과 접근 권한 확정. 현재 원본은 본인 Auth 메타데이터이며 프로필 테이블에는 전화번호 열이 없습니다.
+4. 정지 종료 시각(suspended_until)과 관리자 해제 절차 추가. 현재 열이 없으면 종료일 미정 안내로 차단합니다.
+5. SMTP, 발신 도메인, Confirm Signup 숫자 토큰 템플릿 설정 및 학교 메일 수신/만료/재발송 검증.
+6. 학교 도메인 제한과 정지/학교 인증 정책을 모든 서버 진입점에 적용. 현재 앱의 검사는 DB 권한 검사를 대체하지 않습니다.
+7. 실제 세션 복원·만료·로그아웃·다른 사용자 전환과 정산 RPC 통합 검증.
+
+실제 회원 생성/메일 발송/DB 마이그레이션은 이번 병합 작업에서 실행하지 않았습니다. 방·지도·지갑·정산 화면과 알고리즘은 main 변경을 그대로 보존했습니다.
+
+참고: [Supabase React Native 인증](https://supabase.com/docs/guides/auth/quickstarts/react-native), [Expo 보호 경로](https://docs.expo.dev/router/advanced/protected/).

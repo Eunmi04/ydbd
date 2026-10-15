@@ -14,11 +14,14 @@ function load(relative) {
   const instance = new Module(filename, module);
   instance.filename = filename;
   instance.paths = module.paths;
+  const originalRequire = instance.require.bind(instance);
+  instance.require = (name) => name === './policy' ? load('../src/auth/policy.ts') : originalRequire(name);
   instance._compile(code, filename);
   return instance.exports;
 }
 const { accessFor, canPreview, isSchoolEmail, validateSignup, suspensionMessage } = load('../src/auth/policy.ts');
 const { authClient } = load('../src/auth/client.ts');
+const { createSupabaseAuthClient } = load('../src/auth/supabaseAdapter.ts');
 const user = { id: 'test', email: 'test@jmail.ac.kr', schoolVerification: 'verified', accountStatus: 'active', suspendedUntil: null };
 const ready = (overrides = {}) => ({ status: 'ready', user: { ...user, ...overrides } });
 
@@ -67,4 +70,34 @@ test('unconfigured adapter cannot create accounts, sessions or verified status',
   assert.equal(authClient.configured, false);
   assert.equal(await authClient.restoreSession(), null);
   for (const operation of ['login', 'register', 'getMe', 'sendSchoolCode', 'verifySchoolCode']) await assert.rejects(() => authClient[operation](), /준비 중/);
+});
+
+function fakeSupabase(profileOverrides = {}, accountOverrides = {}) {
+  const account = { id: 'test', email: 'test@jmail.ac.kr', email_confirmed_at: '2026-01-01', user_metadata: { phone: '01000000000', schoolVerification: 'verified', accountStatus: 'active' }, ...accountOverrides };
+  const profile = { id: 'test', nickname: 'Test', account_status: 'ACTIVE', verification_status: 'UNVERIFIED', ...profileOverrides };
+  return {
+    auth: {
+      getSession: async () => ({ data: { session: { user: account } }, error: null }),
+      getUser: async () => ({ data: { user: account }, error: null }),
+      signUp: async () => ({ data: { session: null }, error: null }),
+      signInWithPassword: async () => ({ error: { code: 'email_not_confirmed' } }),
+      verifyOtp: async () => ({ error: null }),
+    },
+    from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: profile, error: null }) }) }) }),
+  };
+}
+test('Supabase adapter requires server profile verification, not client metadata', async () => {
+  const client = createSupabaseAuthClient(fakeSupabase());
+  assert.equal((await client.getMe()).schoolVerification, 'unverified');
+  await client.verifySchoolCode('123456', 'test@jmail.ac.kr');
+  assert.equal((await client.getMe()).schoolVerification, 'unverified');
+  assert.equal((await createSupabaseAuthClient(fakeSupabase({ verification_status: 'VERIFIED' })).getMe()).schoolVerification, 'verified');
+  assert.equal((await createSupabaseAuthClient(fakeSupabase({ verification_status: 'VERIFIED' }, { email_confirmed_at: null })).getMe()).schoolVerification, 'unverified');
+});
+test('Supabase adapter preserves restriction and handles signup without a session', async () => {
+  const client = createSupabaseAuthClient(fakeSupabase({ account_status: 'RESTRICTED' }));
+  assert.equal((await client.getMe()).accountStatus, 'suspended');
+  assert.equal(await client.register({ nickname: 'Test', email: 'test@jmail.ac.kr', password: 'test-only-input', phone: '01000000000' }), null);
+  await assert.rejects(() => client.login('test@jmail.ac.kr', 'test-only-input'), { name: 'EmailConfirmationRequired' });
+  assert.equal(accessFor({ status: 'pending', user: null, email: 'test@jmail.ac.kr' }), 'unverified');
 });

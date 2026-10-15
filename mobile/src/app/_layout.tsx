@@ -28,6 +28,10 @@ function Routes() {
     </Stack.Protected>
   </Stack></View>;
 }
+function AuthenticatedApp() {
+  const { state, preview } = useAuth();
+  return <AppProvider key={preview ? 'preview' : state.user?.id ?? 'guest'}><Routes /></AppProvider>;
+}
 export default function RootLayout() {
-  return <SafeAreaProvider><AuthProvider><AppProvider><Routes /></AppProvider></AuthProvider></SafeAreaProvider>;
+  return <SafeAreaProvider><AuthProvider><AuthenticatedApp /></AuthProvider></SafeAreaProvider>;
 }
