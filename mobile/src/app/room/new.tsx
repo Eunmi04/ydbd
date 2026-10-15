@@ -1,12 +1,26 @@
-import { useState } from 'react';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AppButton, Card, ErrorNotice, InfoRow, MapPreview, Page, TextField } from '../../components/ui';
+
+import KakaoMap from '../../components/KakaoMap.web';
+import {
+  AppButton,
+  Card,
+  ErrorNotice,
+  InfoRow,
+  Page,
+  TextField,
+} from '../../components/ui';
+
 import { mockService } from '../../services/mockService';
 import { useApp } from '../../state/AppContext';
 import { colors, money } from '../../theme';
 
-const days = Array.from({ length: 7 }, (_, index) => { const date = new Date(); date.setDate(date.getDate() + index + 1); return date; });
+const days = Array.from({ length: 7 }, (_, index) => {
+  const date = new Date();
+  date.setDate(date.getDate() + index + 1);
+  return date;
+});
 
 export default function NewRoom() {
   const { createRoom } = useApp();
@@ -19,24 +33,211 @@ export default function NewRoom() {
   const [fare, setFare] = useState('12000');
   const [error, setError] = useState('');
   const numericFare = Number(fare.replace(/,/g, '')) || 0;
-  const deposit = mockService.depositFor({ estimatedFare: numericFare, maxMembers });
+  const deposit = mockService.depositFor({
+    estimatedFare: numericFare,
+    maxMembers,
+  });
   const submit = () => {
-    const h = Number(hour); const m = Number(minute);
-    if (!Number.isInteger(h) || h < 0 || h > 23 || !Number.isInteger(m) || m < 0 || m > 59) { setError('시간은 00~23시, 분은 00~59로 입력해 주세요.'); return; }
-    const date = new Date(days[selectedDay]); date.setHours(h, m, 0, 0);
-    try { const id = createRoom({ departure, destination, departureAt: date.toISOString(), maxMembers, estimatedFare: numericFare }); router.replace({ pathname: '/room/[id]', params: { id } }); } catch (cause) { setError(cause instanceof Error ? cause.message : '방을 만들지 못했습니다.'); }
+    const h = Number(hour);
+    const m = Number(minute);
+    if (
+      !Number.isInteger(h) ||
+      h < 0 ||
+      h > 23 ||
+      !Number.isInteger(m) ||
+      m < 0 ||
+      m > 59
+    ) {
+      setError('시간은 00~23시, 분은 00~59로 입력해 주세요.');
+      return;
+    }
+    const date = new Date(days[selectedDay]);
+    date.setHours(h, m, 0, 0);
+    try {
+      const id = createRoom({
+        departure,
+        destination,
+        departureAt: date.toISOString(),
+        maxMembers,
+        estimatedFare: numericFare,
+      });
+      router.replace({ pathname: '/room/[id]', params: { id } });
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : '방을 만들지 못했습니다.',
+      );
+    }
   };
-  return <Page back eyebrow="CREATE A ROOM" title="동승 방 만들기" subtitle="이동 일정과 경로를 알려주세요." footer={<AppButton label="방 만들기" onPress={submit} />}>
-    <TextField label="출발지" value={departure} onChangeText={setDeparture} placeholder="예: 삼송역" />
-    <TextField label="목적지" value={destination} onChangeText={setDestination} placeholder="예: 중부대학교" />
-    <MapPreview departure={departure || '출발지'} destination={destination || '목적지'} />
-    <View style={styles.group}><Text style={styles.label}>출발 날짜</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayList}>{days.map((day, index) => <Pressable key={index} onPress={() => setSelectedDay(index)} style={({ pressed }) => [styles.chip, selectedDay === index && styles.chipSelected, pressed && styles.pressed]}><Text style={[styles.chipText, selectedDay === index && styles.chipTextSelected]}>{index === 0 ? '내일' : `${day.getMonth() + 1}/${day.getDate()}`}</Text></Pressable>)}</ScrollView></View>
-    <View style={styles.timeRow}><View style={{ flex: 1 }}><TextField label="시" value={hour} onChangeText={setHour} placeholder="18" keyboardType="number-pad" /></View><Text style={styles.colon}>:</Text><View style={{ flex: 1 }}><TextField label="분" value={minute} onChangeText={setMinute} placeholder="30" keyboardType="number-pad" /></View></View>
-    <View style={styles.group}><Text style={styles.label}>최대 인원</Text><View style={styles.memberList}>{[2, 3, 4].map((count) => <Pressable key={count} onPress={() => setMaxMembers(count)} style={({ pressed }) => [styles.memberChip, maxMembers === count && styles.memberSelected, pressed && styles.pressed]}><Text style={[styles.memberText, maxMembers === count && styles.memberTextSelected]}>{count}명</Text></Pressable>)}</View></View>
-    <TextField label="예상 택시 요금" value={fare} onChangeText={setFare} placeholder="예: 12000" keyboardType="number-pad" hint="실제 요금은 탑승 후 정산 화면에서 입력해요." />
-    <Card style={styles.estimate}><InfoRow label="예상 택시 요금" value={`${money(numericFare)}원`} /><InfoRow label="최대 참여 인원" value={`${maxMembers}명`} /><View style={styles.divider} /><InfoRow label="1인 예치 포인트" value={`${money(deposit)}P`} strong /><Text style={styles.estimateHint}>예상 1인 부담액을 올림하며 최소 예치액은 5,000P예요.</Text></Card>
-    {error ? <ErrorNotice message={error} /> : null}
-  </Page>;
+  return (
+    <Page
+      back
+      eyebrow="CREATE A ROOM"
+      title="동승 방 만들기"
+      subtitle="이동 일정과 경로를 알려주세요."
+      footer={<AppButton label="방 만들기" onPress={submit} />}
+    >
+      <TextField
+        label="출발지"
+        value={departure}
+        onChangeText={setDeparture}
+        placeholder="예: 삼송역"
+      />
+      <TextField
+        label="목적지"
+        value={destination}
+        onChangeText={setDestination}
+        placeholder="예: 중부대학교"
+      />
+
+      <KakaoMap departure={departure} destination={destination} />
+
+      <View style={styles.group}>
+        <Text style={styles.label}>출발 날짜</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.dayList}
+        >
+          {days.map((day, index) => (
+            <Pressable
+              key={index}
+              onPress={() => setSelectedDay(index)}
+              style={({ pressed }) => [
+                styles.chip,
+                selectedDay === index && styles.chipSelected,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  selectedDay === index && styles.chipTextSelected,
+                ]}
+              >
+                {index === 0
+                  ? '내일'
+                  : `${day.getMonth() + 1}/${day.getDate()}`}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+      <View style={styles.timeRow}>
+        <View style={{ flex: 1 }}>
+          <TextField
+            label="시"
+            value={hour}
+            onChangeText={setHour}
+            placeholder="18"
+            keyboardType="number-pad"
+          />
+        </View>
+        <Text style={styles.colon}>:</Text>
+        <View style={{ flex: 1 }}>
+          <TextField
+            label="분"
+            value={minute}
+            onChangeText={setMinute}
+            placeholder="30"
+            keyboardType="number-pad"
+          />
+        </View>
+      </View>
+      <View style={styles.group}>
+        <Text style={styles.label}>최대 인원</Text>
+        <View style={styles.memberList}>
+          {[2, 3, 4].map((count) => (
+            <Pressable
+              key={count}
+              onPress={() => setMaxMembers(count)}
+              style={({ pressed }) => [
+                styles.memberChip,
+                maxMembers === count && styles.memberSelected,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.memberText,
+                  maxMembers === count && styles.memberTextSelected,
+                ]}
+              >
+                {count}명
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+      <TextField
+        label="예상 택시 요금"
+        value={fare}
+        onChangeText={setFare}
+        placeholder="예: 12000"
+        keyboardType="number-pad"
+        hint="실제 요금은 탑승 후 정산 화면에서 입력해요."
+      />
+      <Card style={styles.estimate}>
+        <InfoRow label="예상 택시 요금" value={`${money(numericFare)}원`} />
+        <InfoRow label="최대 참여 인원" value={`${maxMembers}명`} />
+        <View style={styles.divider} />
+        <InfoRow label="1인 예치 포인트" value={`${money(deposit)}P`} strong />
+        <Text style={styles.estimateHint}>
+          예상 1인 부담액을 올림하며 최소 예치액은 5,000P예요.
+        </Text>
+      </Card>
+      {error ? <ErrorNotice message={error} /> : null}
+    </Page>
+  );
 }
 
-const styles = StyleSheet.create({ group: { gap: 10 }, label: { color: colors.ink, fontSize: 14, fontWeight: '800' }, dayList: { gap: 8, paddingRight: 10 }, chip: { minWidth: 65, minHeight: 42, borderRadius: 13, backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 }, chipSelected: { backgroundColor: colors.green, borderColor: colors.green }, chipText: { color: colors.ink, fontSize: 13, fontWeight: '700' }, chipTextSelected: { color: 'white' }, timeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 }, colon: { color: colors.green, fontSize: 26, fontWeight: '800', marginBottom: 12 }, memberList: { flexDirection: 'row', gap: 8 }, memberChip: { flex: 1, height: 45, borderRadius: 13, backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }, memberSelected: { borderColor: colors.green, backgroundColor: colors.greenPale }, memberText: { color: colors.ink, fontWeight: '700' }, memberTextSelected: { color: colors.greenDark }, estimate: { backgroundColor: colors.greenPale, borderColor: colors.greenPale, gap: 5 }, divider: { height: 1, backgroundColor: '#C8DDC9', marginVertical: 6 }, estimateHint: { color: colors.muted, fontSize: 11, marginTop: 6 }, pressed: { opacity: 0.7, transform: [{ scale: 0.98 }] } });
+const styles = StyleSheet.create({
+  group: { gap: 10 },
+  label: { color: colors.ink, fontSize: 14, fontWeight: '800' },
+  dayList: { gap: 8, paddingRight: 10 },
+  chip: {
+    minWidth: 65,
+    minHeight: 42,
+    borderRadius: 13,
+    backgroundColor: colors.paper,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  chipSelected: { backgroundColor: colors.green, borderColor: colors.green },
+  chipText: { color: colors.ink, fontSize: 13, fontWeight: '700' },
+  chipTextSelected: { color: 'white' },
+  timeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  colon: {
+    color: colors.green,
+    fontSize: 26,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  memberList: { flexDirection: 'row', gap: 8 },
+  memberChip: {
+    flex: 1,
+    height: 45,
+    borderRadius: 13,
+    backgroundColor: colors.paper,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memberSelected: {
+    borderColor: colors.green,
+    backgroundColor: colors.greenPale,
+  },
+  memberText: { color: colors.ink, fontWeight: '700' },
+  memberTextSelected: { color: colors.greenDark },
+  estimate: {
+    backgroundColor: colors.greenPale,
+    borderColor: colors.greenPale,
+    gap: 5,
+  },
+  divider: { height: 1, backgroundColor: '#C8DDC9', marginVertical: 6 },
+  estimateHint: { color: colors.muted, fontSize: 11, marginTop: 6 },
+  pressed: { opacity: 0.7, transform: [{ scale: 0.98 }] },
+});
