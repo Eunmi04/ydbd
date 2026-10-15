@@ -68,7 +68,7 @@ export default function SettlementScreen() {
     {error ? <ErrorNotice message={error} /> : null}
     <Text style={styles.note}>실제 결제·송금은 일어나지 않습니다.</Text>
   </Page>;
-  return <Page back eyebrow="SETTLEMENT" title="이제 정산해 볼까요?" subtitle="실제 택시 요금을 입력하면 자동으로 나눠요." footer={<AppButton label="정산 완료" onPress={submit} />}>
+  return <Page back eyebrow="SETTLEMENT" title="이제 정산해 볼까요?" subtitle="실제 택시 요금을 입력하면 자동으로 나눠요." footer={<AppButton label="정산 완료" onPress={submit} disabled={!isHost || !room.members.some((member) => member.userId === user?.id && member.boarded) || numericFare <= 0 || riders.length === 0 || share > deposit} />}>
     <Card style={styles.routeCard}><Text style={styles.route}>{room.departure} → {room.destination}</Text><Text style={styles.routeMeta}>탑승 완료 {riders.length}명 · 예치 포인트 {money(deposit)}P</Text></Card>
     <TextField label="실제 택시 요금" value={fare} onChangeText={setFare} placeholder="예: 12000" keyboardType="number-pad" hint="기사님께 지불한 총 택시 요금을 입력해 주세요." />
     <Card style={styles.calculation}><Text style={styles.cardTitle}>정산 미리보기</Text><View style={styles.divider} /><InfoRow label="실제 택시 요금" value={`${money(numericFare)}원`} /><InfoRow label="탑승 인원" value={`${riders.length}명`} /><InfoRow label="1인 부담 금액" value={`${money(share)}P`} /><InfoRow label="예치 포인트" value={`${money(deposit)}P`} /><View style={styles.divider} /><InfoRow label="환불 예정 포인트" value={`${money(refund)}P`} strong /></Card>

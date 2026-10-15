@@ -394,7 +394,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!user) throw new Error('로그인이 필요합니다.');
     const room = data.rooms.find((item) => item.id === id);
     if (!room || room.status !== 'confirmed') throw new Error('정산할 수 없는 방입니다.');
+    if (room.hostId !== user.id) throw new Error('방장만 정산할 수 있습니다.');
+    if (!Number.isInteger(fare) || fare <= 0) throw new Error('올바른 택시 요금을 입력해 주세요.');
     const boarded = room.members.filter((member) => member.boarded);
+    if (boarded.length === 0) throw new Error('탑승 완료한 동승자가 없습니다.');
     const settlements: Settlement[] = boarded.map((member) => mockService.settle(room, member.userId, fare));
     const mine = settlements.find((item) => item.userId === user.id);
     if (!mine) throw new Error('탑승 완료 후 정산할 수 있습니다.');
