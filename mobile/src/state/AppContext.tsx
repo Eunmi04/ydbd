@@ -1,445 +1,457 @@
-import React, { createContext, useContext, useState } from 'react'
-import { mockService } from '../services/mockService'
-import type { AppData, Room, Settlement, User } from '../types'
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import type { User as AuthUser } from '@supabase/supabase-js';
+import { mockService } from '../services/mockService';
+import { isSupabaseConfigured, supabase } from '../services/supabaseClient';
+import { mutate, readCreditSummary } from '../services/capstoneApi';
+import type { AppData, CreditLedgerRecord, CreditReservationRecord, Profile, Room, RoomMemberRecord, RoomRecord, Settlement, SettlementItemRecord, SettlementRecord, User } from '../types';
 
-type NewRoom = Pick<
-  Room,
-  'departure' | 'destination' | 'departureAt' | 'maxMembers' | 'estimatedFare'
->
-
+type NewRoom = Pick<Room, 'departure' | 'destination' | 'departureAt' | 'maxMembers' | 'estimatedFare'>;
 type AppContextValue = {
-  data: AppData
-  user: User | undefined
-  balance: number
-  login: (email: string, password: string) => void
-  register: (nickname: string, email: string, password: string) => void
-  logout: () => void
-  createRoom: (input: NewRoom) => string
-  joinRoom: (id: string) => void
-  confirmRoom: (id: string) => void
-  boardRoom: (id: string) => void
-  charge: (amount: number) => void
-  settleRoom: (id: string, fare: number) => string
+  data: AppData;
+  user: User | undefined;
+  balance: number;
+  heldCredit: number;
+  creditLoading: boolean;
+  settlementRecords: SettlementRecord[];
+  settlementItems: SettlementItemRecord[];
+  mode: 'supabase' | 'mock';
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  refreshRooms: () => Promise<void>;
+  refreshCredits: () => Promise<void>;
+  refreshSettlements: () => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
+  register: (nickname: string, email: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  createRoom: (input: NewRoom) => Promise<string>;
+  joinRoom: (id: string) => Promise<void>;
+  confirmRoom: (id: string) => Promise<void>;
+  prepareRoom: (id: string) => Promise<void>;
+  expireReadyCheck: (id: string) => Promise<void>;
+  cancelRoom: (id: string) => Promise<void>;
+  boardRoom: (id: string) => Promise<void>;
+  reportNoShow: (id: string) => Promise<void>;
+  charge: (amount: number) => void;
+  settleRoom: (id: string, fare: number, evidence?: string) => Promise<string>;
+  confirmSettlement: (id: string, version: number) => Promise<void>;
+  disputeSettlement: (id: string, version: number, reason: string) => Promise<void>;
+  reviseFare: (id: string, fare: number, evidence: string) => Promise<void>;
+  finalizeSettlement: (id: string, version: number) => Promise<void>;
+};
+
+const AppContext = createContext<AppContextValue | null>(null);
+const emptyData = (): AppData => ({
+  currentUserId: null, users: [], rooms: [], balances: {}, transactions: [], settlements: [],
+});
+const demoColor = '#8DBD99';
+
+function legacyStatus(status: RoomRecord['status']): Room['status'] {
+  if (status === 'OPEN') return 'recruiting';
+  if (status === 'FIXED') return 'confirmed';
+  if (status === 'SETTLED') return 'settled';
+  return 'other';
 }
 
-const AppContext = createContext<AppContextValue | null>(null)
+function toLegacyRoom(record: RoomRecord, members: RoomMemberRecord[], reservations: CreditReservationRecord[]): Room {
+  return {
+    id: record.id, hostId: record.host_id,
+    departure: record.departure_text, destination: record.destination_text,
+    departureAt: record.departure_at, maxMembers: record.max_members,
+    estimatedFare: record.estimated_fare, status: legacyStatus(record.status),
+    dbStatus: record.status,
+    readyDeadlineAt: record.ready_deadline_at,
+    memberCountKnown: members.some((member) => member.room_id === record.id),
+    members: members.filter((member) => member.room_id === record.id && member.member_status === 'JOINED')
+      .map((member) => ({ userId: member.user_id, boarded: member.boarded_status === 'BOARDED',
+        boardedStatus: member.boarded_status, ready: member.ready_status === 'READY',
+        deposit: reservations.find((reservation) => reservation.room_id === record.id
+          && reservation.user_id === member.user_id && reservation.status === 'HELD')?.amount ?? 0 })),
+  };
+}
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<AppData>(() => mockService.initialData())
+  const [data, setData] = useState<AppData>(() => isSupabaseConfigured ? emptyData() : mockService.initialData());
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [heldCredit, setHeldCredit] = useState(0);
+  const [creditLoading, setCreditLoading] = useState(isSupabaseConfigured);
+  const [settlementRecords, setSettlementRecords] = useState<SettlementRecord[]>([]);
+  const [settlementItems, setSettlementItems] = useState<SettlementItemRecord[]>([]);
+  const reservationsRef = useRef<CreditReservationRecord[]>([]);
+  const authUserIdRef = useRef<string | null>(null);
+  const roomRefreshSeq = useRef(0);
+  const [isLoading, setIsLoading] = useState(isSupabaseConfigured);
+  const user = data.users.find((item) => item.id === data.currentUserId);
+  const balance = user ? data.balances[user.id] ?? 0 : 0;
 
-  const user = data.users.find((item) => item.id === data.currentUserId)
-
-  const balance = user ? (data.balances[user.id] ?? 0) : 0
-
-  // 로그인
-  const login = (email: string, password: string) => {
-    const nextUser = mockService.login(data.users, email, password)
-
-    setData((previous) => ({
-      ...previous,
-      currentUserId: nextUser.id,
-    }))
-  }
-
-  // 회원가입
-  const register = (nickname: string, email: string, password: string) => {
-    const nextUser = mockService.register(data.users, nickname, email, password)
-
-    setData((previous) => ({
-      ...previous,
-      users: [...previous.users, nextUser],
-      balances: {
-        ...previous.balances,
-        [nextUser.id]: 15000,
-      },
-      currentUserId: nextUser.id,
-    }))
-  }
-
-  // 로그아웃
-  const logout = () => {
-    setData((previous) => ({
-      ...previous,
-      currentUserId: null,
-    }))
-  }
-
-  // 방 생성
-  const createRoom = (input: NewRoom) => {
-    if (!user) {
-      throw new Error('로그인이 필요합니다.')
+  const refreshRooms = useCallback(async () => {
+    if (!supabase || !authUserIdRef.current) return;
+    const requestingUserId = authUserIdRef.current;
+    const requestSeq = ++roomRefreshSeq.current;
+    const { data: roomRows, error: roomError } = await supabase
+      .from('rooms').select('*').order('departure_at', { ascending: true });
+    if (roomError) throw roomError;
+    const records = (roomRows ?? []) as RoomRecord[];
+    const roomIds = records.map((room) => room.id);
+    let members: RoomMemberRecord[] = [];
+    if (roomIds.length) {
+      const { data: memberRows, error: memberError } = await supabase
+        .from('room_members').select('*').in('room_id', roomIds);
+      if (memberError) throw memberError;
+      members = (memberRows ?? []) as RoomMemberRecord[];
     }
+    if (authUserIdRef.current !== requestingUserId || requestSeq !== roomRefreshSeq.current) return;
+    const ids = [...new Set(members.map((member) => member.user_id))];
+    setData((previous) => {
+      const me = previous.users.find((item) => item.id === requestingUserId);
+      const anonymous = ids.filter((id) => id !== requestingUserId)
+        .map((id, index) => ({ id, nickname: `동승자 ${index + 1}`, email: '', color: demoColor }));
+      return {
+        ...previous, rooms: records.map((room) => toLegacyRoom(room, members, reservationsRef.current)),
+        users: [...(me ? [me] : []), ...anonymous],
+      };
+    });
+  }, []);
 
-    if (!input.departure.trim() || !input.destination.trim()) {
-      throw new Error('출발지와 목적지를 입력해 주세요.')
+  const refreshCredits = useCallback(async () => {
+    if (!supabase || !authUserIdRef.current) return;
+    const requestingUserId = authUserIdRef.current;
+    setCreditLoading(true);
+    try {
+      const [summary, ledgerResult, reservationResult] = await Promise.all([
+        readCreditSummary(),
+        supabase.from('credit_ledger').select('id,user_id,room_id,settlement_id,entry_type,amount,created_at')
+          .order('created_at', { ascending: false }).limit(100),
+        supabase.from('room_credit_reservations').select('id,room_id,user_id,amount,status,created_at'),
+      ]);
+      if (ledgerResult.error) throw ledgerResult.error;
+      if (reservationResult.error) throw reservationResult.error;
+      if (authUserIdRef.current !== requestingUserId) return;
+      const ledger = (ledgerResult.data ?? []) as CreditLedgerRecord[];
+      const currentReservations = (reservationResult.data ?? []) as CreditReservationRecord[];
+      reservationsRef.current = currentReservations;
+      setHeldCredit(summary.held_credit);
+      setData((previous) => ({ ...previous,
+        balances: { ...previous.balances, [requestingUserId]: summary.available_credit },
+        rooms: previous.rooms.map((room) => ({ ...room, members: room.members.map((member) => ({
+          ...member, deposit: currentReservations.find((reservation) => reservation.room_id === room.id
+            && reservation.user_id === member.userId && reservation.status === 'HELD')?.amount ?? 0,
+        })) })),
+        transactions: ledger.map((entry) => ({
+          id: entry.id, userId: entry.user_id,
+          type: entry.entry_type === 'ROOM_HOLD' ? 'deposit' : entry.entry_type === 'ROOM_RELEASE' ? 'refund'
+            : entry.entry_type === 'SETTLEMENT_DEBIT' ? 'use' : 'charge',
+          amount: entry.amount, title: entry.entry_type === 'TEST_GRANT' ? '개발용 테스트 크레딧 지급'
+            : entry.entry_type === 'ROOM_HOLD' ? '방 예치' : entry.entry_type === 'ROOM_RELEASE' ? '예치 해제'
+              : entry.entry_type === 'SETTLEMENT_DEBIT' ? '동승 분담금' : '개발용 조정',
+          createdAt: entry.created_at,
+        })),
+      }));
+    } finally { setCreditLoading(false); }
+  }, []);
+
+  const refreshSettlements = useCallback(async () => {
+    if (!supabase || !authUserIdRef.current) return;
+    const requestingUserId = authUserIdRef.current;
+    const [settlementResult, itemResult] = await Promise.all([
+      supabase.from('settlements').select('*').order('created_at', { ascending: false }),
+      supabase.from('settlement_items').select('*'),
+    ]);
+    if (settlementResult.error) throw settlementResult.error;
+    if (itemResult.error) throw itemResult.error;
+    if (authUserIdRef.current !== requestingUserId) return;
+    const records = (settlementResult.data ?? []) as SettlementRecord[];
+    const items = (itemResult.data ?? []) as SettlementItemRecord[];
+    setSettlementRecords(records);
+    setSettlementItems(items);
+    setData((previous) => ({ ...previous,
+      settlements: records.filter((record) => record.status === 'COMPLETED').flatMap((record) => {
+        const mine = items.find((item) => item.settlement_id === record.id && item.user_id === requestingUserId);
+        if (!mine) return [];
+        return [{ id: record.id, roomId: record.room_id, userId: requestingUserId,
+          actualFare: record.actual_fare, riderCount: previous.rooms.find((room) => room.id === record.room_id)
+            ?.members.filter((member) => member.boarded).length ?? 0,
+          share: mine.share_amount, refund: mine.refund_amount,
+          createdAt: record.completed_at ?? record.created_at }];
+      }),
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    supabase.auth.getSession().then(({ data: result }) => {
+      if (!active) return;
+      authUserIdRef.current = result.session?.user.id ?? null;
+      setAuthUser((previous) => previous?.id === result.session?.user.id ? previous : result.session?.user ?? null);
+      setData((previous) => previous.currentUserId === (result.session?.user.id ?? null)
+        ? previous : { ...emptyData(), currentUserId: result.session?.user.id ?? null });
+      setIsLoading(false);
+    }).catch(() => { if (active) setIsLoading(false); });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      authUserIdRef.current = session?.user.id ?? null;
+      setAuthUser((previous) => previous?.id === session?.user.id ? previous : session?.user ?? null);
+      setData((previous) => previous.currentUserId === (session?.user.id ?? null)
+        ? previous : { ...emptyData(), currentUserId: session?.user.id ?? null });
+    });
+    return () => { active = false; listener.subscription.unsubscribe(); };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase || isLoading) return;
+    const client = supabase;
+    const current = authUser;
+    if (!current) return;
+    let active = true;
+    const load = async () => {
+      const { data: profileRow, error } = await client.from('profiles')
+        .select('*').eq('id', current.id).single();
+      if (!active || authUserIdRef.current !== current.id) return;
+      if (error) { console.warn('Profile load failed:', error.message); return; }
+      const profile = profileRow as Profile;
+      const me: User = {
+        id: profile.id, nickname: profile.nickname,
+        email: profile.email ?? current.email ?? '', color: demoColor,
+      };
+      setData((previous) => ({ ...previous, users: [me, ...previous.users.filter((item) => item.id !== me.id)] }));
+    };
+    void load();
+    void refreshRooms().then(refreshSettlements)
+      .catch((error) => console.warn('Room or settlement load failed:', error));
+    void refreshCredits().catch((error) => console.warn('Credit load failed:', error));
+    return () => { active = false; };
+  }, [authUser, isLoading, refreshRooms, refreshCredits, refreshSettlements]);
+
+  const login = async (email: string, password: string) => {
+    if (supabase) {
+      const { data: result, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (error) throw error;
+      authUserIdRef.current = result.user.id;
+      setAuthUser(result.user);
+      setData({ ...emptyData(), currentUserId: result.user.id });
+      return;
     }
-
-    if (input.departure.trim() === input.destination.trim()) {
-      throw new Error('출발지와 목적지가 같을 수 없습니다.')
-    }
-
-    if (!Number.isFinite(input.estimatedFare) || input.estimatedFare <= 0) {
-      throw new Error('예상 택시 요금을 입력해 주세요.')
-    }
-
-    if (new Date(input.departureAt).getTime() <= Date.now()) {
-      throw new Error('미래의 출발 시간을 선택해 주세요.')
-    }
-
-    const deposit = mockService.depositFor(input)
-
-    if (balance < deposit) {
-      throw new Error(
-        '방을 만들 예치 포인트가 부족합니다. 지갑에서 충전해 주세요.',
-      )
-    }
-
-    const id = `r${Date.now()}`
-
-    const room: Room = {
-      ...input,
-      id,
-      departure: input.departure.trim(),
-      destination: input.destination.trim(),
-      hostId: user.id,
-      status: 'recruiting',
-      members: [
-        {
-          userId: user.id,
-          boarded: false,
-          deposit,
-        },
-      ],
-    }
-
-    setData((previous) => ({
-      ...previous,
-
-      balances: {
-        ...previous.balances,
-        [user.id]: (previous.balances[user.id] ?? 0) - deposit,
-      },
-
-      rooms: [room, ...previous.rooms],
-
-      transactions: [
-        {
-          id: `t${Date.now()}`,
-          userId: user.id,
-          type: 'deposit',
-          amount: -deposit,
-          title: `${room.departure} → ${room.destination} 예치`,
-          createdAt: new Date().toISOString(),
-        },
-        ...previous.transactions,
-      ],
-    }))
-
-    return id
-  }
-
-  // 방 참여
-  const joinRoom = (id: string) => {
-    if (!user) {
-      throw new Error('로그인이 필요합니다.')
-    }
-
-    const room = data.rooms.find((item) => item.id === id)
-
-    if (!room) {
-      throw new Error('방을 찾을 수 없습니다.')
-    }
-
-    if (room.status !== 'recruiting') {
-      throw new Error('모집이 끝난 방입니다.')
-    }
-
-    if (room.members.some((member) => member.userId === user.id)) {
-      return
-    }
-
-    if (room.members.length >= room.maxMembers) {
-      throw new Error('모집 인원이 가득 찼습니다.')
-    }
-
-    const deposit = mockService.depositFor(room)
-
-    if (balance < deposit) {
-      throw new Error('포인트가 부족합니다. 지갑에서 충전해 주세요.')
-    }
-
-    setData((previous) => ({
-      ...previous,
-
-      balances: {
-        ...previous.balances,
-        [user.id]: (previous.balances[user.id] ?? 0) - deposit,
-      },
-
-      rooms: previous.rooms.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              members: [
-                ...item.members,
-                {
-                  userId: user.id,
-                  boarded: false,
-                  deposit,
-                },
-              ],
-            }
-          : item,
-      ),
-
-      transactions: [
-        {
-          id: `t${Date.now()}`,
-          userId: user.id,
-          type: 'deposit',
-          amount: -deposit,
-          title: `${room.departure} → ${room.destination} 예치`,
-          createdAt: new Date().toISOString(),
-        },
-        ...previous.transactions,
-      ],
-    }))
-  }
-
-  // 방 확정
-  const confirmRoom = (id: string) => {
-    const room = data.rooms.find((item) => item.id === id)
-
-    if (!room || room.hostId !== user?.id) {
-      throw new Error('방장만 방을 확정할 수 있습니다.')
-    }
-
-    if (room.members.length < 2) {
-      throw new Error('두 명 이상 참여해야 방을 확정할 수 있습니다.')
-    }
-
-    setData((previous) => ({
-      ...previous,
-
-      rooms: previous.rooms.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: 'confirmed',
-            }
-          : item,
-      ),
-    }))
-  }
-
-  // 탑승 확인
-  const boardRoom = (id: string) => {
-    const room = data.rooms.find((item) => item.id === id)
-
-    if (!room || room.status !== 'confirmed') {
-      throw new Error('확정된 방에서 탑승을 확인할 수 있습니다.')
-    }
-
-    if (!room.members.some((member) => member.userId === user?.id)) {
-      throw new Error('참여한 방만 탑승을 확인할 수 있습니다.')
-    }
-
-    setData((previous) => ({
-      ...previous,
-
-      rooms: previous.rooms.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              members: item.members.map((member) =>
-                member.userId === user?.id
-                  ? {
-                      ...member,
-                      boarded: true,
-                    }
-                  : member,
-              ),
-            }
-          : item,
-      ),
-    }))
-  }
-
-  // 포인트 충전
-  const charge = (amount: number) => {
-    if (!user || amount <= 0) {
-      throw new Error('충전 금액을 선택해 주세요.')
-    }
-
-    setData((previous) => ({
-      ...previous,
-
-      balances: {
-        ...previous.balances,
-        [user.id]: (previous.balances[user.id] ?? 0) + amount,
-      },
-
-      transactions: [
-        {
-          id: `t${Date.now()}`,
-          userId: user.id,
-          type: 'charge',
-          amount,
-          title: '포인트 충전',
-          createdAt: new Date().toISOString(),
-        },
-        ...previous.transactions,
-      ],
-    }))
-  }
-
-  // 택시 정산
-  const settleRoom = (id: string, fare: number) => {
-    // 1. 로그인 확인
-    if (!user) {
-      throw new Error('로그인이 필요합니다.')
-    }
-
-    // 2. 방 찾기
-    const room = data.rooms.find((item) => item.id === id)
-
-    if (!room) {
-      throw new Error('방을 찾을 수 없습니다.')
-    }
-
-    // 3. 방 상태 확인
-    if (room.status !== 'confirmed') {
-      throw new Error('정산할 수 없는 방입니다.')
-    }
-
-    // 4. 방장인지 확인
-    // ★ 가장 중요한 수정 부분
-    if (room.hostId !== user.id) {
-      throw new Error('방장만 정산할 수 있습니다.')
-    }
-
-    // 5. 실제 택시 요금 확인
-    if (!Number.isInteger(fare) || fare <= 0) {
-      throw new Error('올바른 택시 요금을 입력해 주세요.')
-    }
-
-    // 6. 실제 탑승 완료한 사람만 정산
-    const boarded = room.members.filter((member) => member.boarded)
-
-    if (boarded.length === 0) {
-      throw new Error('탑승 완료한 동승자가 없습니다.')
-    }
-
-    // 7. 탑승자별 분담금 계산
-    const settlements: Settlement[] = boarded.map((member) =>
-      mockService.settle(room, member.userId, fare),
-    )
-
-    // 8. 현재 방장 정산 결과 확인
-    const mine = settlements.find((item) => item.userId === user.id)
-
-    if (!mine) {
-      throw new Error('방장님의 탑승 완료 확인이 필요합니다.')
-    }
-
-    // 9. 잔액 복사
-    const nextBalances = {
-      ...data.balances,
-    }
-
-    // 10. 새로운 거래내역
-    const nextTransactions: AppData['transactions'] = []
-
-    // 11. 각 구성원 정산 처리
-    room.members.forEach((member) => {
-      const result = settlements.find((item) => item.userId === member.userId)
-
-      // 탑승자는 계산된 환급금
-      // 미탑승자는 예치금 전액 환급
-      const refund = result?.refund ?? member.deposit
-
-      // 잔액에 환급금 추가
-      nextBalances[member.userId] = (nextBalances[member.userId] ?? 0) + refund
-
-      // 탑승자의 실제 사용 금액 기록
-      if (result) {
-        nextTransactions.push({
-          id: `t${result.id}-use`,
-          userId: member.userId,
-          type: 'use',
-          amount: -result.share,
-          title: `${room.departure} → ${room.destination} 정산`,
-          createdAt: result.createdAt,
-        })
+    const nextUser = mockService.login(data.users, email, password);
+    setData((previous) => ({ ...previous, currentUserId: nextUser.id }));
+  };
+  const register = async (nickname: string, email: string, password: string): Promise<boolean> => {
+    if (supabase) {
+      if (!nickname.trim() || nickname.trim().length > 40 || !email.includes('@') || password.length < 6) {
+        throw new Error('닉네임, 이메일, 6자 이상의 비밀번호를 입력해 주세요.');
       }
+      const { data: result, error } = await supabase.auth.signUp({
+        email: email.trim(), password, options: { data: { nickname: nickname.trim() } },
+      });
+      if (error) throw error;
+      if (result.session?.user) {
+        authUserIdRef.current = result.session.user.id;
+        setAuthUser(result.session.user);
+        setData({ ...emptyData(), currentUserId: result.session.user.id });
+        return true;
+      }
+      return false; // Email confirmation is enabled in the Supabase project.
+    }
+    const nextUser = mockService.register(data.users, nickname, email, password);
+    setData((previous) => ({ ...previous, users: [...previous.users, nextUser], balances: { ...previous.balances, [nextUser.id]: 15000 }, currentUserId: nextUser.id }));
+    return true;
+  };
+  const logout = async () => {
+    if (supabase) {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      authUserIdRef.current = null;
+      setAuthUser(null);
+      setData(emptyData());
+      return;
+    }
+    setData((previous) => ({ ...previous, currentUserId: null }));
+  };
 
-      // 예치금 환급 기록
-      nextTransactions.push({
-        id: `t${id}-${member.userId}-refund`,
-        userId: member.userId,
-        type: 'refund',
-        amount: refund,
-        title: result ? '예치 잔액 환불' : '미탑승 예치금 환불',
-        createdAt: mine.createdAt,
-      })
-    })
-
-    // 12. 최종 데이터 저장
+  const createRoom = async (input: NewRoom): Promise<string> => {
+    if (!(supabase ? authUserIdRef.current : user)) throw new Error('로그인이 필요합니다.');
+    if (!input.departure.trim() || !input.destination.trim()) throw new Error('출발지와 목적지를 입력해 주세요.');
+    if (input.departure.trim() === input.destination.trim()) throw new Error('출발지와 목적지가 같을 수 없습니다.');
+    if (!Number.isFinite(input.estimatedFare) || input.estimatedFare <= 0) throw new Error('예상 택시 요금을 입력해 주세요.');
+    if (new Date(input.departureAt).getTime() <= Date.now()) throw new Error('미래의 출발 시간을 선택해 주세요.');
+    if (supabase) {
+      if (!Number.isSafeInteger(input.estimatedFare) || !Number.isInteger(input.maxMembers)
+        || input.maxMembers < 2 || input.maxMembers > 4) throw new Error('요금과 인원을 확인해 주세요.');
+      const created = await mutate<{ room_id: string }>('create_room', {
+        p_departure_text: input.departure.trim(), p_destination_text: input.destination.trim(),
+        p_departure_at: input.departureAt, p_max_members: input.maxMembers,
+        p_estimated_fare: input.estimatedFare,
+      });
+      await refreshRooms().catch((cause) => console.warn('Room refresh after creation failed:', cause));
+      return created.room_id;
+    }
+    if (!user) throw new Error('로그인이 필요합니다.');
+    const deposit = mockService.depositFor(input);
+    if (balance < deposit) throw new Error('방을 만들 예치 포인트가 부족합니다. 지갑에서 충전해 주세요.');
+    const id = `r${Date.now()}`;
+    const room: Room = { ...input, id, departure: input.departure.trim(), destination: input.destination.trim(), hostId: user.id, status: 'recruiting', members: [{ userId: user.id, boarded: false, deposit }] };
     setData((previous) => ({
       ...previous,
+      balances: { ...previous.balances, [user.id]: (previous.balances[user.id] ?? 0) - deposit },
+      rooms: [room, ...previous.rooms],
+      transactions: [{ id: `t${Date.now()}`, userId: user.id, type: 'deposit', amount: -deposit, title: `${room.departure} → ${room.destination} 예치`, createdAt: new Date().toISOString() }, ...previous.transactions],
+    }));
+    return id;
+  };
 
-      // 잔액 변경
+  const joinRoom = async (id: string) => {
+    const participantId = supabase ? authUserIdRef.current : user?.id;
+    if (!participantId) throw new Error('로그인이 필요합니다.');
+    const room = data.rooms.find((item) => item.id === id);
+    if (!room) throw new Error('방을 찾을 수 없습니다.');
+    if (room.status !== 'recruiting') throw new Error('모집이 끝난 방입니다.');
+    if (room.members.some((member) => member.userId === participantId)) return;
+    if (room.members.length >= room.maxMembers) throw new Error('모집 인원이 가득 찼습니다.');
+    if (supabase) {
+      await mutate('join_room', { p_room_id: id });
+      await refreshRooms().catch((cause) => console.warn('Room refresh after joining failed:', cause));
+      return;
+    }
+    if (!user) throw new Error('로그인이 필요합니다.');
+    const deposit = mockService.depositFor(room);
+    if (balance < deposit) throw new Error('포인트가 부족합니다. 지갑에서 충전해 주세요.');
+    setData((previous) => ({
+      ...previous,
+      balances: { ...previous.balances, [user.id]: (previous.balances[user.id] ?? 0) - deposit },
+      rooms: previous.rooms.map((item) => item.id === id ? { ...item, members: [...item.members, { userId: user.id, boarded: false, deposit }] } : item),
+      transactions: [{ id: `t${Date.now()}`, userId: user.id, type: 'deposit', amount: -deposit, title: `${room.departure} → ${room.destination} 예치`, createdAt: new Date().toISOString() }, ...previous.transactions],
+    }));
+  };
+
+  const confirmRoom = async (id: string) => {
+    if (supabase) {
+      await mutate('start_ready_check', { p_room_id: id });
+      await refreshRooms();
+      return;
+    }
+    const room = data.rooms.find((item) => item.id === id);
+    if (!room || room.hostId !== user?.id) throw new Error('방장만 방을 확정할 수 있습니다.');
+    if (room.members.length < 2) throw new Error('두 명 이상 참여해야 방을 확정할 수 있습니다.');
+    setData((previous) => ({ ...previous, rooms: previous.rooms.map((item) => item.id === id ? { ...item, status: 'confirmed' } : item) }));
+  };
+
+  const prepareRoom = async (id: string) => {
+    if (!supabase) throw new Error('준비 확인은 Supabase 모드에서만 가능합니다.');
+    await mutate('prepare_member', { p_room_id: id });
+    await Promise.all([refreshCredits(), refreshRooms()]);
+  };
+
+  const expireReadyCheck = async (id: string) => {
+    if (!supabase) return;
+    await mutate('expire_ready_check', { p_room_id: id });
+    await Promise.all([refreshCredits(), refreshRooms()]);
+  };
+
+  const cancelRoom = async (id: string) => {
+    if (!supabase) throw new Error('방 취소는 Supabase 모드에서만 가능합니다.');
+    await mutate('cancel_room', { p_room_id: id });
+    await Promise.all([refreshCredits(), refreshRooms()]);
+  };
+
+  const boardRoom = async (id: string) => {
+    if (supabase) {
+      await mutate('mark_boarding', { p_room_id: id });
+      await refreshRooms();
+      return;
+    }
+    const room = data.rooms.find((item) => item.id === id);
+    if (!room || room.status !== 'confirmed') throw new Error('확정된 방에서 탑승을 확인할 수 있습니다.');
+    if (!room.members.some((member) => member.userId === user?.id)) throw new Error('참여한 방만 탑승을 확인할 수 있습니다.');
+    setData((previous) => ({ ...previous, rooms: previous.rooms.map((item) => item.id === id ? { ...item, members: item.members.map((member) => member.userId === user?.id ? { ...member, boarded: true } : member) } : item) }));
+  };
+
+  const reportNoShow = async (id: string) => {
+    if (!supabase) throw new Error('미탑승 보고는 Supabase 모드에서만 가능합니다.');
+    await mutate('report_no_show', { p_room_id: id });
+    await refreshRooms();
+  };
+
+  const charge = (amount: number) => {
+    if (supabase) throw new Error('Supabase 모드에서는 개발용 seed로만 TEST 크레딧을 지급합니다.');
+    if (!user || amount <= 0) throw new Error('충전 금액을 선택해 주세요.');
+    setData((previous) => ({
+      ...previous,
+      balances: { ...previous.balances, [user.id]: (previous.balances[user.id] ?? 0) + amount },
+      transactions: [{ id: `t${Date.now()}`, userId: user.id, type: 'charge', amount, title: '포인트 충전', createdAt: new Date().toISOString() }, ...previous.transactions],
+    }));
+  };
+
+  const settleRoom = async (id: string, fare: number, evidence = '개인정보를 가린 시연용 증빙') => {
+    if (supabase) {
+      if (!Number.isSafeInteger(fare) || fare <= 0) throw new Error('실제 요금을 양의 정수로 입력해 주세요.');
+      const result = await mutate<{ settlement_id: string }>('submit_fare', {
+        p_room_id: id, p_actual_fare: fare,
+        p_evidence_type: 'SAMPLE', p_evidence_reference: evidence,
+      });
+      await refreshRooms();
+      await refreshSettlements();
+      return result.settlement_id;
+    }
+    if (!user) throw new Error('로그인이 필요합니다.');
+    const room = data.rooms.find((item) => item.id === id);
+    if (!room || room.status !== 'confirmed') throw new Error('정산할 수 없는 방입니다.');
+    if (room.hostId !== user.id) throw new Error('방장만 정산할 수 있습니다.');
+    if (!Number.isInteger(fare) || fare <= 0) throw new Error('올바른 택시 요금을 입력해 주세요.');
+    const boarded = room.members.filter((member) => member.boarded);
+    if (boarded.length === 0) throw new Error('탑승 완료한 동승자가 없습니다.');
+    const settlements: Settlement[] = boarded.map((member) => mockService.settle(room, member.userId, fare));
+    const mine = settlements.find((item) => item.userId === user.id);
+    if (!mine) throw new Error('탑승 완료 후 정산할 수 있습니다.');
+    const nextBalances = { ...data.balances };
+    const nextTransactions: AppData['transactions'] = [];
+    room.members.forEach((member) => {
+      const result = settlements.find((item) => item.userId === member.userId);
+      const refund = result?.refund ?? member.deposit;
+      nextBalances[member.userId] = (nextBalances[member.userId] ?? 0) + refund;
+      if (result) nextTransactions.push({ id: `t${result.id}-use`, userId: member.userId, type: 'use', amount: -result.share, title: `${room.departure} → ${room.destination} 정산`, createdAt: result.createdAt });
+      nextTransactions.push({ id: `t${id}-${member.userId}-refund`, userId: member.userId, type: 'refund', amount: refund, title: result ? '예치 잔액 환불' : '미탑승 예치금 환불', createdAt: mine.createdAt });
+    });
+    setData((previous) => ({
+      ...previous,
       balances: nextBalances,
-
-      // 방 상태 변경
-      rooms: previous.rooms.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: 'settled',
-            }
-          : item,
-      ),
-
-      // 정산 결과 저장
+      rooms: previous.rooms.map((item) => item.id === id ? { ...item, status: 'settled' } : item),
       settlements: [...settlements, ...previous.settlements],
-
-      // 거래내역 저장
       transactions: [...nextTransactions, ...previous.transactions],
-    }))
+    }));
+    return mine.id;
+  };
 
-    // 방장 정산 결과 ID 반환
-    return mine.id
-  }
+  const confirmSettlement = async (id: string, version: number) => {
+    await mutate('confirm_settlement', { p_settlement_id: id, p_settlement_version: version });
+    await refreshSettlements();
+  };
+  const disputeSettlement = async (id: string, version: number, reason: string) => {
+    await mutate('dispute_settlement', { p_settlement_id: id, p_settlement_version: version, p_reason: reason });
+    await Promise.all([refreshRooms(), refreshSettlements()]);
+  };
+  const reviseFare = async (id: string, fare: number, evidence: string) => {
+    if (!Number.isSafeInteger(fare) || fare <= 0) throw new Error('요금을 양의 정수로 입력해 주세요.');
+    await mutate('revise_fare', { p_settlement_id: id, p_actual_fare: fare,
+      p_evidence_type: 'SAMPLE', p_evidence_reference: evidence });
+    await Promise.all([refreshRooms(), refreshSettlements()]);
+  };
+  const finalizeSettlement = async (id: string, version: number) => {
+    await mutate('finalize_settlement', { p_settlement_id: id, p_settlement_version: version });
+    await refreshRooms();
+    await Promise.all([refreshCredits(), refreshSettlements()]);
+  };
 
-  return (
-    <AppContext.Provider
-      value={{
-        data,
-        user,
-        balance,
-        login,
-        register,
-        logout,
-        createRoom,
-        joinRoom,
-        confirmRoom,
-        boardRoom,
-        charge,
-        settleRoom,
-      }}
-    >
-      {children}
-    </AppContext.Provider>
-  )
+  return <AppContext.Provider value={{
+    data, user, balance, heldCredit, creditLoading, settlementRecords, settlementItems,
+    mode: supabase ? 'supabase' : 'mock', isLoading,
+    isAuthenticated: supabase ? Boolean(authUser) : Boolean(data.currentUserId),
+    refreshRooms, refreshCredits, refreshSettlements, login, register, logout, createRoom, joinRoom,
+    confirmRoom, prepareRoom, expireReadyCheck, cancelRoom, boardRoom, reportNoShow, charge, settleRoom,
+    confirmSettlement, disputeSettlement, reviseFare, finalizeSettlement,
+  }}>{children}</AppContext.Provider>;
 }
 
 export function useApp() {
-  const context = useContext(AppContext)
-
-  if (!context) {
-    throw new Error('AppProvider가 필요합니다.')
-  }
-
-  return context
+  const context = useContext(AppContext);
+  if (!context) throw new Error('AppProvider가 필요합니다.');
+  return context;
 }
