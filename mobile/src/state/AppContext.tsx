@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
+import { useAuth } from '../auth/AuthContext';
 import { mockService } from '../services/mockService';
 import type { AppData, Room, Settlement, User } from '../types';
 
@@ -7,9 +8,7 @@ type AppContextValue = {
   data: AppData;
   user: User | undefined;
   balance: number;
-  login: (email: string, password: string) => void;
-  register: (nickname: string, email: string, password: string) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   createRoom: (input: NewRoom) => string;
   joinRoom: (id: string) => void;
   confirmRoom: (id: string) => void;
@@ -21,19 +20,12 @@ type AppContextValue = {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<AppData>(() => mockService.initialData());
-  const user = data.users.find((item) => item.id === data.currentUserId);
+  const { state, access, logout, preview } = useAuth();
+  const [storedData, setData] = useState<AppData>(() => mockService.initialData());
+  const user = preview ? storedData.users.find((item) => item.id === 'u1') : access === 'allowed' ? state.user ?? undefined : undefined;
+  const data: AppData = { ...storedData, currentUserId: user?.id ?? null,
+    users: user ? [...storedData.users.filter((item) => item.id !== user.id), { id: user.id, nickname: user.nickname, email: user.email, color: user.color }] : storedData.users };
   const balance = user ? data.balances[user.id] ?? 0 : 0;
-
-  const login = (email: string, password: string) => {
-    const nextUser = mockService.login(data.users, email, password);
-    setData((previous) => ({ ...previous, currentUserId: nextUser.id }));
-  };
-  const register = (nickname: string, email: string, password: string) => {
-    const nextUser = mockService.register(data.users, nickname, email, password);
-    setData((previous) => ({ ...previous, users: [...previous.users, nextUser], balances: { ...previous.balances, [nextUser.id]: 15000 }, currentUserId: nextUser.id }));
-  };
-  const logout = () => setData((previous) => ({ ...previous, currentUserId: null }));
 
   const createRoom = (input: NewRoom) => {
     if (!user) throw new Error('로그인이 필요합니다.');
@@ -121,7 +113,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return mine.id;
   };
 
-  return <AppContext.Provider value={{ data, user, balance, login, register, logout, createRoom, joinRoom, confirmRoom, boardRoom, charge, settleRoom }}>{children}</AppContext.Provider>;
+  return <AppContext.Provider value={{ data, user, balance, logout, createRoom, joinRoom, confirmRoom, boardRoom, charge, settleRoom }}>{children}</AppContext.Provider>;
 }
 
 export function useApp() {

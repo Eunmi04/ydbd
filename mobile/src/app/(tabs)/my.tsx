@@ -1,21 +1,27 @@
-import { router } from 'expo-router';
+import { useState } from 'react';
+import { useAuth } from '../../auth/AuthContext';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { AppButton, Avatar, Card, Header, Page } from '../../components/ui';
+import { AppButton, Avatar, Card, ErrorNotice, Header, Page } from '../../components/ui';
 import { useApp } from '../../state/AppContext';
 import { colors, money, shortDate } from '../../theme';
 
 export default function MyPage() {
   const { data, user, logout } = useApp();
+  const { state, preview } = useAuth();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const settlements = data.settlements.filter((item) => item.userId === user?.id);
-  const signOut = () => { logout(); router.replace('/login'); };
+  const signOut = async () => { if (busy) return; setBusy(true); try { await logout(); } catch { setError('로그아웃을 완료하지 못했습니다. 다시 시도해 주세요.'); } finally { setBusy(false); } };
   return <Page eyebrow="MY PAGE" title="마이페이지" subtitle="함께한 이동을 한눈에 확인해요.">
     {user ? <Card style={styles.profile}><Avatar user={user} size={58} /><View style={{ flex: 1 }}><Text style={styles.name}>{user.nickname}</Text><Text style={styles.email}>{user.email}</Text></View></Card> : null}
+    <Card>{preview ? <Text>개발용 시연 계정 · 학교 미인증 · 실제 회원 정보가 아닙니다.</Text> : <><Text>전화번호: {state.user?.phone}</Text><Text>중부대학교 · 학교 이메일 인증 완료</Text></>}</Card>
     <View style={styles.stats}><Card style={styles.statCard}><Text style={styles.statLabel}>누적 이용</Text><Text style={styles.statNumber}>{settlements.length}<Text style={styles.statUnit}> 회</Text></Text></Card><Card style={styles.statCard}><Text style={styles.statLabel}>절약한 이동</Text><Text style={styles.statNumber}>{settlements.length}<Text style={styles.statUnit}> 번</Text></Text></Card></View>
     <Header title="이용 내역" />
     <Card style={{ paddingVertical: 3 }}>{settlements.map((item, index) => <View key={item.id} style={[styles.history, index < settlements.length - 1 && styles.border]}><View><Text style={styles.historyTitle}>함께 탄 택시 · 정산 완료</Text><Text style={styles.historyDate}>{shortDate(item.createdAt)} · {item.riderCount}명 탑승</Text></View><Text style={styles.historyAmount}>{money(item.share)}P</Text></View>)}</Card>
     <Header title="설정" />
     <Card style={{ paddingVertical: 5 }}><Pressable onPress={() => Alert.alert('알림 설정', '시연용 앱에서 알림 기능을 준비 중입니다.')} style={({ pressed }) => [styles.menu, pressed && { opacity: 0.6 }]}><Text style={styles.menuText}>알림 설정</Text><Text style={styles.chevron}>›</Text></Pressable><Pressable onPress={() => Alert.alert('서비스 안내', '같은 방향이면, 같이 타요. 동승과 정산을 간편하게 돕는 서비스입니다.')} style={({ pressed }) => [styles.menu, pressed && { opacity: 0.6 }]}><Text style={styles.menuText}>서비스 안내</Text><Text style={styles.chevron}>›</Text></Pressable></Card>
-    <AppButton label="로그아웃" variant="ghost" onPress={signOut} />
+    <AppButton label={preview ? '둘러보기 종료' : '로그아웃'} variant="ghost" disabled={busy} onPress={() => void signOut()} />
+    {error ? <ErrorNotice message={error} /> : null}
   </Page>;
 }
 

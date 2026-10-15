@@ -1,4 +1,4 @@
-export type User = { id: string; nickname: string; email: string; password: string; color: string };
+export type User = { id: string; nickname: string; email: string; color: string };
 export type RoomStatus = 'recruiting' | 'confirmed' | 'settled';
 export type RoomMember = { userId: string; boarded: boolean; deposit: number };
 export type Room = {

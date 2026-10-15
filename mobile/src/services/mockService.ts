@@ -1,4 +1,4 @@
-import type { AppData, Room, Settlement, User } from '../types';
+import type { AppData, Room, Settlement } from '../types';
 
 const today = new Date();
 const departure = (days: number, hour: number, minute = 0) => {
@@ -12,8 +12,6 @@ const departure = (days: number, hour: number, minute = 0) => {
   return date.toISOString();
 };
 
-export const testAccount = { email: 'minji@example.com', password: '1234' };
-
 export const mockService = {
   initialData(): AppData {
     return {
@@ -23,29 +21,25 @@ export const mockService = {
         {
           id: 'u1',
           nickname: '민지',
-          email: testAccount.email,
-          password: testAccount.password,
+          email: 'minji@example.com',
           color: '#E7AD71',
         },
         {
           id: 'u2',
           nickname: '도윤',
           email: 'doyun@example.com',
-          password: '1234',
           color: '#88BBA2',
         },
         {
           id: 'u3',
           nickname: '수아',
           email: 'sua@example.com',
-          password: '1234',
           color: '#BFA5D9',
         },
         {
           id: 'u4',
           nickname: '현우',
           email: 'hyunwoo@example.com',
-          password: '1234',
           color: '#91B8D7',
         },
       ],
@@ -182,37 +176,6 @@ export const mockService = {
           createdAt: departure(-15, 9),
         },
       ],
-    };
-  },
-  login(users: User[], email: string, password: string): User {
-    const user = users.find(
-      (item) =>
-        item.email.toLowerCase() === email.trim().toLowerCase() &&
-        item.password === password,
-    );
-    if (!user) throw new Error('이메일 또는 비밀번호를 확인해 주세요.');
-    return user;
-  },
-  register(
-    users: User[],
-    nickname: string,
-    email: string,
-    password: string,
-  ): User {
-    if (!nickname.trim() || !email.includes('@') || password.length < 4)
-      throw new Error('닉네임, 이메일, 비밀번호 4자 이상을 입력해 주세요.');
-    if (
-      users.some(
-        (user) => user.email.toLowerCase() === email.trim().toLowerCase(),
-      )
-    )
-      throw new Error('이미 사용 중인 이메일입니다.');
-    return {
-      id: `u${Date.now()}`,
-      nickname: nickname.trim(),
-      email: email.trim(),
-      password,
-      color: '#8DBD99',
     };
   },
   depositFor(room: Pick<Room, 'estimatedFare' | 'maxMembers'>): number {
