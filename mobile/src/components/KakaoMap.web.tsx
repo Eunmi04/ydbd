@@ -21,6 +21,7 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
     let cancelled = false;
     let map: any;
     let markers: any[] = [];
+    let polylines: any[] = [];
 
     setReady(false);
 
@@ -39,7 +40,7 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
               'script[data-kakao-map-sdk]',
             );
 
-            if (existing && window.kakao?.maps) {
+            if (existing && window.kakao?.maps?.services) {
               resolve();
               return;
             }
@@ -61,7 +62,7 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
           });
         }
 
-        window.kakao.maps.load(() => {
+        window.kakao.maps.load(async () => {
           if (cancelled || !mapElement.current) return;
 
           const kakao = window.kakao;
@@ -77,80 +78,144 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
           const searches = [
             { keyword: departure.trim(), label: '출발지' },
             { keyword: destination.trim(), label: '도착지' },
-          ].filter((item) => item.keyword.length > 0);
+          ];
 
-          if (searches.length === 0) {
-            setMessage('출발지와 목적지를 입력하면 지도에 표시할게요.');
+          if (!searches[0].keyword || !searches[1].keyword) {
+            setMessage('출발지와 도착지를 모두 입력해 주세요.');
             setReady(true);
             return;
           }
 
-          let completed = 0;
-          let found = 0;
-
-          const finishSearch = () => {
-            completed += 1;
-
-            if (completed === searches.length) {
-              if (cancelled) return;
-
-              if (found > 0) {
-                if (found > 1) {
-                  map.setBounds(bounds);
+          const searchPlace = (keyword: string) =>
+            new Promise<any>((resolve, reject) => {
+              places.keywordSearch(keyword, (result: any[], status: string) => {
+                if (
+                  status === kakao.maps.services.Status.OK &&
+                  result.length > 0
+                ) {
+                  resolve(result[0]);
                 } else {
-                  map.setCenter(bounds.getSouthWest());
-                  map.setLevel(5);
+                  reject(new Error(`장소를 찾지 못했습니다: ${keyword}`));
                 }
-
-                setMessage(
-                  found === searches.length
-                    ? '출발지와 도착지를 지도에 표시했어요!'
-                    : '일부 장소만 찾았어요. 입력한 장소명을 확인해 주세요.',
-                );
-              } else {
-                setMessage(
-                  '장소를 찾지 못했어요. 검색어를 조금 더 구체적으로 입력해 주세요.',
-                );
-              }
-
-              setReady(true);
-            }
-          };
-
-          searches.forEach(({ keyword, label }) => {
-            places.keywordSearch(keyword, (result: any[], status: string) => {
-              if (cancelled) return;
-
-              if (
-                status === kakao.maps.services.Status.OK &&
-                result.length > 0
-              ) {
-                const place = result[0];
-                const position = new kakao.maps.LatLng(
-                  Number(place.y),
-                  Number(place.x),
-                );
-
-                const marker = new kakao.maps.Marker({
-                  map,
-                  position,
-                  title: `${label}: ${place.place_name}`,
-                });
-
-                markers.push(marker);
-                bounds.extend(position);
-                found += 1;
-              }
-
-              finishSearch();
+              });
             });
-          });
+
+          try {
+            const [startPlace, endPlace] = await Promise.all([
+              searchPlace(searches[0].keyword),
+              searchPlace(searches[1].keyword),
+            ]);
+
+            if (cancelled) return;
+
+            const start = {
+              x: Number(startPlace.x),
+              y: Number(startPlace.y),
+            };
+            const end = {
+              x: Number(endPlace.x),
+              y: Number(endPlace.y),
+            };
+
+            const startPosition = new kakao.maps.LatLng(start.y, start.x);
+            const endPosition = new kakao.maps.LatLng(end.y, end.x);
+
+            markers.push(
+              new kakao.maps.Marker({
+                map,
+                position: startPosition,
+                title: `출발지: ${startPlace.place_name}`,
+              }),
+              new kakao.maps.Marker({
+                map,
+                position: endPosition,
+                title: `도착지: ${endPlace.place_name}`,
+              }),
+            );
+
+            bounds.extend(startPosition);
+            bounds.extend(endPosition);
+
+            setMessage('자동차 경로를 불러오는 중...');
+
+            const params = new URLSearchParams({
+              origin: `${start.x},${start.y}`,
+              destination: `${end.x},${end.y}`,
+            });
+
+            const response = await fetch(
+              `http://localhost:3000/api/directions?${params.toString()}`,
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              throw new Error(data.error || '자동차 경로 요청에 실패했습니다.');
+            }
+
+            if (cancelled) return;
+
+            const roads =
+              data.routes?.[0]?.sections?.flatMap(
+                (section: any) => section.roads ?? [],
+              ) ?? [];
+
+            const path: any[] = [];
+
+            roads.forEach((road: any) => {
+              const vertexes = road.vertexes ?? [];
+
+              for (let i = 0; i + 1 < vertexes.length; i += 2) {
+                const longitude = Number(vertexes[i]);
+                const latitude = Number(vertexes[i + 1]);
+
+                if (Number.isFinite(longitude) && Number.isFinite(latitude)) {
+                  path.push(new kakao.maps.LatLng(latitude, longitude));
+                }
+              }
+            });
+
+            if (path.length < 2) {
+              throw new Error(
+                '자동차 경로가 없어요. 출발지와 도착지를 확인해 주세요.',
+              );
+            }
+
+            const polyline = new kakao.maps.Polyline({
+              path,
+              strokeWeight: 5,
+              strokeColor: '#2878FF',
+              strokeOpacity: 0.9,
+              strokeStyle: 'solid',
+            });
+
+            polyline.setMap(map);
+            polylines.push(polyline);
+
+            path.forEach((point) => bounds.extend(point));
+            map.setBounds(bounds);
+
+            setMessage('출발지부터 도착지까지 택시 경로를 표시했어요!');
+          } catch (error) {
+            if (cancelled) return;
+
+            setMessage(
+              error instanceof Error
+                ? error.message
+                : '자동차 경로를 불러오지 못했어요.',
+            );
+
+            map.setBounds(bounds);
+          } finally {
+            if (!cancelled) setReady(true);
+          }
         });
       } catch {
         if (!cancelled) {
           setMessage(
             '지도를 불러오지 못했어요. 카카오맵 키와 등록 도메인을 확인해 주세요.',
           );
+          setReady(true);
         }
       }
     };
@@ -160,6 +225,7 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
     return () => {
       cancelled = true;
       markers.forEach((marker) => marker.setMap(null));
+      polylines.forEach((polyline) => polyline.setMap(null));
     };
   }, [departure, destination]);
 
