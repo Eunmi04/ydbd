@@ -5,9 +5,9 @@ import { useApp } from '../../state/AppContext';
 import { colors, money, shortDate } from '../../theme';
 
 export default function MyPage() {
-  const { data, user, logout } = useApp();
+  const { data, user, logout, mode } = useApp();
   const settlements = data.settlements.filter((item) => item.userId === user?.id);
-  const signOut = () => { logout(); router.replace('/login'); };
+  const signOut = async () => { try { await logout(); if (mode === 'mock') router.replace('/login'); } catch (error) { Alert.alert('로그아웃 실패', error instanceof Error ? error.message : '다시 시도해 주세요.'); } };
   return <Page eyebrow="MY PAGE" title="마이페이지" subtitle="함께한 이동을 한눈에 확인해요.">
     {user ? <Card style={styles.profile}><Avatar user={user} size={58} /><View style={{ flex: 1 }}><Text style={styles.name}>{user.nickname}</Text><Text style={styles.email}>{user.email}</Text></View></Card> : null}
     <View style={styles.stats}><Card style={styles.statCard}><Text style={styles.statLabel}>누적 이용</Text><Text style={styles.statNumber}>{settlements.length}<Text style={styles.statUnit}> 회</Text></Text></Card><Card style={styles.statCard}><Text style={styles.statLabel}>절약한 이동</Text><Text style={styles.statNumber}>{settlements.length}<Text style={styles.statUnit}> 번</Text></Text></Card></View>

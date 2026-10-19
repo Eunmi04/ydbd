@@ -5,11 +5,11 @@ import { useApp } from '../../state/AppContext';
 import { colors, money, shortDate } from '../../theme';
 
 export default function Home() {
-  const { data, user, balance } = useApp();
-  const joined = data.rooms.find((room) => room.status !== 'settled' && room.members.some((member) => member.userId === user?.id));
+  const { data, user, balance, mode, creditLoading } = useApp();
+  const joined = data.rooms.find((room) => room.status !== 'settled' && room.dbStatus !== 'CANCELLED' && room.members.some((member) => member.userId === user?.id));
   const latest = data.settlements.filter((item) => item.userId === user?.id).slice(0, 2);
   return <Page eyebrow="GOOD DAY" title={`${user?.nickname ?? '친구'}님, 함께 가요!`} subtitle="같은 방향의 이웃과 이동을 나눠 보세요.">
-    <Card style={styles.balanceCard}><View><Text style={styles.balanceLabel}>내 포인트</Text><Text style={styles.balanceAmount}>{money(balance)}<Text style={styles.balanceUnit}> P</Text></Text><Text style={styles.balanceHint}>동승 예약에 바로 사용할 수 있어요</Text></View><Pressable accessibilityRole="button" onPress={() => router.push('/(tabs)/wallet')} style={({ pressed }) => [styles.balanceGo, pressed && { opacity: 0.6 }]}><Text style={styles.balanceGoText}>↗</Text></Pressable></Card>
+    <Card style={styles.balanceCard}><View><Text style={styles.balanceLabel}>{mode === 'supabase' ? '사용 가능 TEST 크레딧' : '내 포인트'}</Text><Text style={styles.balanceAmount}>{mode === 'supabase' && creditLoading ? '조회 중' : money(balance)}<Text style={styles.balanceUnit}> P</Text></Text><Text style={styles.balanceHint}>{mode === 'supabase' ? '실제 돈이 아닌 시연용 크레딧입니다.' : '동승 예약에 바로 사용할 수 있어요'}</Text></View><Pressable accessibilityRole="button" onPress={() => router.push('/(tabs)/wallet')} style={({ pressed }) => [styles.balanceGo, pressed && { opacity: 0.6 }]}><Text style={styles.balanceGoText}>↗</Text></Pressable></Card>
     <View style={styles.actions}><Pressable onPress={() => router.push('/(tabs)/rooms')} style={({ pressed }) => [styles.actionCard, pressed && styles.pressed]}><Text style={styles.actionIcon}>⌕</Text><Text style={styles.actionTitle}>동승 방 찾기</Text><Text style={styles.actionSub}>내 경로와 맞는 방 찾기</Text></Pressable><Pressable onPress={() => router.push('/room/new')} style={({ pressed }) => [styles.actionCard, styles.actionOrange, pressed && styles.pressed]}><Text style={styles.actionIcon}>＋</Text><Text style={styles.actionTitle}>동승 방 만들기</Text><Text style={styles.actionSub}>시간과 경로를 정해서 모집</Text></Pressable></View>
     <Header title="참여 중인 방" action="전체 보기" onAction={() => router.push('/(tabs)/rooms')} />
     {joined ? <RoomCard room={joined} onPress={() => router.push({ pathname: '/room/[id]', params: { id: joined.id } })} /> : <EmptyState title="참여 중인 방이 없어요" message="이동할 계획이 있다면 방을 찾아보세요." action="동승 방 찾기" onAction={() => router.push('/(tabs)/rooms')} />}

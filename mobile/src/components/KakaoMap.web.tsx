@@ -7,10 +7,7 @@ declare global {
   }
 }
 
-type KakaoMapProps = {
-  departure: string;
-  destination: string;
-};
+type KakaoMapProps = { departure: string; destination: string };
 
 export default function KakaoMap({ departure, destination }: KakaoMapProps) {
   const mapElement = useRef<HTMLDivElement | null>(null);
@@ -19,7 +16,6 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
 
   useEffect(() => {
     let cancelled = false;
-    let map: any;
     let markers: any[] = [];
     let polylines: any[] = [];
 
@@ -30,6 +26,7 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
 
       if (!key) {
         setMessage('카카오맵 키를 찾을 수 없어요. .env 파일을 확인해 주세요.');
+        setReady(true);
         return;
       }
 
@@ -46,7 +43,6 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
             }
 
             const script = existing ?? document.createElement('script');
-
             script.addEventListener('load', () => resolve(), { once: true });
             script.addEventListener(
               'error',
@@ -66,15 +62,13 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
           if (cancelled || !mapElement.current) return;
 
           const kakao = window.kakao;
-
-          map = new kakao.maps.Map(mapElement.current, {
+          const map = new kakao.maps.Map(mapElement.current, {
             center: new kakao.maps.LatLng(37.5665, 126.978),
             level: 7,
           });
 
           const places = new kakao.maps.services.Places();
           const bounds = new kakao.maps.LatLngBounds();
-
           const searches = [
             { keyword: departure.trim(), label: '출발지' },
             { keyword: destination.trim(), label: '도착지' },
@@ -146,7 +140,6 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
             const response = await fetch(
               `http://localhost:3000/api/directions?${params.toString()}`,
             );
-
             const data = await response.json();
 
             if (!response.ok) {
@@ -220,7 +213,7 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
       }
     };
 
-    loadMap();
+    void loadMap();
 
     return () => {
       cancelled = true;
@@ -231,12 +224,7 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
 
   return (
     <View style={styles.container}>
-      <View
-        ref={mapElement as any}
-        style={styles.map}
-        // @ts-ignore 웹 지도 컨테이너
-        collapsable={false}
-      />
+      <View ref={mapElement as any} style={styles.map} collapsable={false} />
       <Text style={styles.message}>
         {ready ? '📍 ' : 'ℹ️ '}
         {message}
@@ -246,19 +234,7 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    width: '100%',
-    gap: 8,
-  },
-  map: {
-    width: '100%',
-    height: 280,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  message: {
-    color: '#52705A',
-    fontSize: 12,
-    lineHeight: 18,
-  },
+  container: { width: '100%', gap: 8 },
+  map: { width: '100%', height: 280, borderRadius: 16, overflow: 'hidden' },
+  message: { color: '#52705A', fontSize: 12, lineHeight: 18 },
 });

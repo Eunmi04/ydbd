@@ -7,17 +7,18 @@ import { testAccount } from '../services/mockService';
 import { colors } from '../theme';
 
 export default function Login() {
-  const { login } = useApp();
-  const [email, setEmail] = useState(testAccount.email);
-  const [password, setPassword] = useState(testAccount.password);
+  const { login, mode } = useApp();
+  const [email, setEmail] = useState(mode === 'mock' ? testAccount.email : '');
+  const [password, setPassword] = useState(mode === 'mock' ? testAccount.password : '');
   const [error, setError] = useState('');
-  const submit = () => { try { login(email, password); router.replace('/(tabs)'); } catch (cause) { setError(cause instanceof Error ? cause.message : '로그인에 실패했습니다.'); } };
-  return <Page eyebrow="WELCOME" title={'같은 방향이면,\n같이 타요'} subtitle="동승부터 포인트 정산까지 한 번에." footer={<><AppButton label="로그인" onPress={submit} /><AppButton label="처음이신가요? 회원가입" onPress={() => router.push('/signup')} variant="ghost" /></>}>
+  const [busy, setBusy] = useState(false);
+  const submit = async () => { setBusy(true); try { await login(email, password); router.replace('/(tabs)'); } catch (cause) { setError(cause instanceof Error ? cause.message : '로그인에 실패했습니다.'); } finally { setBusy(false); } };
+  return <Page eyebrow="WELCOME" title={'같은 방향이면,\n같이 타요'} subtitle="동승부터 포인트 정산까지 한 번에." footer={<><AppButton label="로그인" onPress={submit} disabled={busy} /><AppButton label="처음이신가요? 회원가입" onPress={() => router.push('/signup')} variant="ghost" /></>}>
     <Card style={styles.intro}><Text style={styles.introIcon}>↗</Text><View style={{ flex: 1 }}><Text style={styles.introTitle}>가볍게 함께 가는 길</Text><Text style={styles.introText}>방을 찾고, 예치하고, 정산까지 깔끔하게.</Text></View></Card>
     <TextField label="이메일" value={email} onChangeText={setEmail} placeholder="이메일을 입력해 주세요" keyboardType="email-address" />
     <TextField label="비밀번호" value={password} onChangeText={setPassword} placeholder="비밀번호를 입력해 주세요" secureTextEntry />
     {error ? <ErrorNotice message={error} /> : null}
-    <Text style={styles.demo}>테스트 계정  {testAccount.email} / {testAccount.password}</Text>
+    <Text style={styles.demo}>{mode === 'mock' ? `로컬 시연 계정  ${testAccount.email} / ${testAccount.password}` : 'Supabase 계정으로 로그인합니다.'}{busy ? ' 연결 중…' : ''}</Text>
   </Page>;
 }
 
