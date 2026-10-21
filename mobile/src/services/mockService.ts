@@ -1,4 +1,5 @@
 import type { AppData, Room, Settlement, User } from '../types';
+import { calculateReserveAmount } from './creditPolicy';
 
 const today = new Date();
 const departure = (days: number, hour: number, minute = 0) => {
@@ -216,10 +217,7 @@ export const mockService = {
     };
   },
   depositFor(room: Pick<Room, 'estimatedFare' | 'maxMembers'>): number {
-    return Math.max(
-      5000,
-      Math.ceil(room.estimatedFare / room.maxMembers / 1000) * 1000,
-    );
+    return calculateReserveAmount(room.estimatedFare, room.maxMembers);
   },
   shareFor(fare: number, riderCount: number, riderIndex: number): number {
     return (

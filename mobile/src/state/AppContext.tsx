@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { User as AuthUser } from '@supabase/supabase-js';
 import { mockService } from '../services/mockService';
+import { isValidEstimatedFare } from '../services/creditPolicy';
 import { isSupabaseConfigured, supabase } from '../services/supabaseClient';
 import { mutate, readCreditSummary } from '../services/capstoneApi';
 import type { AppData, CreditLedgerRecord, CreditReservationRecord, Profile, Room, RoomMemberRecord, RoomRecord, Settlement, SettlementItemRecord, SettlementRecord, User } from '../types';
@@ -271,11 +272,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!(supabase ? authUserIdRef.current : user)) throw new Error('로그인이 필요합니다.');
     if (!input.departure.trim() || !input.destination.trim()) throw new Error('출발지와 목적지를 입력해 주세요.');
     if (input.departure.trim() === input.destination.trim()) throw new Error('출발지와 목적지가 같을 수 없습니다.');
-    if (!Number.isFinite(input.estimatedFare) || input.estimatedFare <= 0) throw new Error('예상 택시 요금을 입력해 주세요.');
+    if (!isValidEstimatedFare(input.estimatedFare)) throw new Error('예상 택시 요금은 안전한 범위의 양의 정수여야 해요.');
     if (new Date(input.departureAt).getTime() <= Date.now()) throw new Error('미래의 출발 시간을 선택해 주세요.');
     if (supabase) {
-      if (!Number.isSafeInteger(input.estimatedFare) || !Number.isInteger(input.maxMembers)
-        || input.maxMembers < 2 || input.maxMembers > 4) throw new Error('요금과 인원을 확인해 주세요.');
+      if (!Number.isInteger(input.maxMembers) || input.maxMembers < 2 || input.maxMembers > 4)
+        throw new Error('인원은 2~4명으로 선택해 주세요.');
       const created = await mutate<{ room_id: string }>('create_room', {
         p_departure_text: input.departure.trim(), p_destination_text: input.destination.trim(),
         p_departure_at: input.departureAt, p_max_members: input.maxMembers,

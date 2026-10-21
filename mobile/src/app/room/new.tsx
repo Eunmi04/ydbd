@@ -10,7 +10,7 @@ import {
   Page,
   TextField,
 } from '../../components/ui';
-import { mockService } from '../../services/mockService';
+import { calculateReserveAmount, parseFareInput } from '../../services/creditPolicy';
 import { useApp } from '../../state/AppContext';
 import { colors, money } from '../../theme';
 
@@ -20,6 +20,10 @@ const days = Array.from({ length: 7 }, (_, index) => {
   date.setHours(0, 0, 0, 0);
   return date;
 });
+
+function isFutureDeparture(date: Date): boolean {
+  return date.getTime() > Date.now();
+}
 
 export default function NewRoom() {
   const { createRoom, mode } = useApp();
@@ -32,13 +36,15 @@ export default function NewRoom() {
   const [fare, setFare] = useState('12000');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const numericFare = Number(fare.replace(/,/g, '')) || 0;
-  const deposit = mockService.depositFor({
-    estimatedFare: numericFare,
-    maxMembers,
-  });
+  const fareResult = parseFareInput(fare);
+  const numericFare = fareResult.value;
+  const deposit = numericFare === null ? null : calculateReserveAmount(numericFare, maxMembers);
   const submit = async () => {
     if (busy) return;
+    if (numericFare === null) {
+      setError(fareResult.error);
+      return;
+    }
     const h = Number(hour);
     const m = Number(minute);
     if (
@@ -54,7 +60,7 @@ export default function NewRoom() {
     }
     const date = new Date(days[selectedDay]);
     date.setHours(h, m, 0, 0);
-    if (date.getTime() <= Date.now()) {
+    if (!isFutureDeparture(date)) {
       setError('현재 시간 이후로 출발 시간을 선택해 주세요.');
       return;
     }
@@ -86,7 +92,7 @@ export default function NewRoom() {
         <AppButton
           label={busy ? '방 만드는 중…' : '방 만들기'}
           onPress={submit}
-          disabled={busy}
+          disabled={busy || numericFare === null}
         />
       }
     >
@@ -188,26 +194,22 @@ export default function NewRoom() {
       <TextField
         label="예상 택시 요금"
         value={fare}
-        onChangeText={setFare}
+        onChangeText={(value) => { setFare(value); setError(''); }}
         placeholder="예: 12000"
         keyboardType="number-pad"
         hint="실제 요금은 탑승 후 정산 화면에서 입력해요."
       />
-      <Card style={styles.estimate}>
+      {fareResult.error ? <ErrorNotice message={fareResult.error} /> : null}
+      {numericFare !== null && deposit !== null ? <Card style={styles.estimate}>
         <InfoRow label="예상 택시 요금" value={`${money(numericFare)}원`} />
         <InfoRow label="최대 참여 인원" value={`${maxMembers}명`} />
         <View style={styles.divider} />
-        <InfoRow
-          label="1인 예치 테스트 크레딧"
-          value={`${money(deposit)}P`}
-          strong
-        />
+        <InfoRow label="1인 예치 테스트 크레딧" value={`${money(deposit)}P`} strong />
         <Text style={styles.estimateHint}>
-          {mode === 'supabase'
-            ? '방 생성 때는 예치하지 않습니다. 준비 버튼을 누르면 서버가 TEST 크레딧을 예치합니다.'
-            : '예상 1인 부담액을 올림하며 최소 예치액은 5,000P예요.'}
+          예상 요금을 최대 인원으로 나눈 뒤 1,000P 단위로 올려요. 최소 예치액은 5,000P예요.
+          {mode === 'supabase' ? ' 방 생성 때는 예치하지 않고, 준비 버튼을 누르면 서버가 실제 예치액을 계산해요.' : ''}
         </Text>
-      </Card>
+      </Card> : null}
       {error ? <ErrorNotice message={error} /> : null}
     </Page>
   );

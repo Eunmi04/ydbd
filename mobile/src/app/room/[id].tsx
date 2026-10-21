@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AppButton, Avatar, Card, EmptyState, ErrorNotice, Header, InfoRow, Page, PointBadge } from '../../components/ui';
 import KakaoMap from '../../components/KakaoMap.web';
 import { useApp } from '../../state/AppContext';
-import { mockService } from '../../services/mockService';
+import { calculateReserveAmount } from '../../services/creditPolicy';
 import { colors, money, shortDate } from '../../theme';
 
 export default function RoomDetail() {
@@ -32,7 +32,10 @@ export default function RoomDetail() {
   </Page>;
   const member = room.members.find((item) => item.userId === user?.id);
   const isHost = room.hostId === user?.id;
-  const deposit = mode === 'supabase' ? mockService.depositFor(room) : member?.deposit ?? mockService.depositFor(room);
+  const recordedDeposit = member?.deposit ?? 0;
+  const hasRecordedDeposit = recordedDeposit > 0;
+  const deposit = hasRecordedDeposit
+    ? recordedDeposit : calculateReserveAmount(room.estimatedFare, room.maxMembers);
   const run = async (action: () => Promise<void>) => {
     if (busy) return;
     setBusy(true);
@@ -68,7 +71,7 @@ export default function RoomDetail() {
     <Card><InfoRow label="출발지" value={room.departure} /><InfoRow label="목적지" value={room.destination} /><InfoRow label="출발 시간" value={shortDate(room.departureAt)} /><InfoRow label="현재 인원" value={`${room.dbStatus && !room.memberCountKnown ? '?' : room.members.length} / ${room.maxMembers}명`} /></Card>
     <Header title="함께 타는 사람" />
     <Card style={{ paddingVertical: 4 }}>{room.dbStatus && !room.memberCountKnown ? <Text style={styles.memberStatus}>참여 후 동승자 목록을 볼 수 있어요.</Text> : room.members.map((item, index) => { const participant = data.users.find((person) => person.id === item.userId); if (!participant) return null; return <View key={item.userId} style={[styles.member, index < room.members.length - 1 && styles.border]}><Avatar user={participant} size={37} /><Text style={styles.memberName}>{participant.nickname}{participant.id === room.hostId ? <Text style={styles.host}>  방장</Text> : null}</Text><Text style={styles.memberStatus}>{item.boardedStatus === 'NO_SHOW' ? '미탑승' : item.boarded ? '탑승 완료' : item.ready ? '준비 완료' : '참여 중'}</Text></View>; })}</Card>
-    <Card style={styles.depositCard}><View><Text style={styles.depositLabel}>1인 예치 테스트 크레딧</Text><Text style={styles.depositHint}>{mode === 'supabase' ? '준비 버튼을 누를 때 서버가 금액을 계산하고 예치합니다.' : '정산 후 남은 포인트는 자동으로 환불돼요.'}</Text></View><PointBadge amount={deposit} /></Card>
+    <Card style={styles.depositCard}><View><Text style={styles.depositLabel}>{mode === 'supabase' && !hasRecordedDeposit ? '1인 예상 예치 TEST 크레딧' : '1인 예치 테스트 크레딧'}</Text><Text style={styles.depositHint}>{mode === 'supabase' ? hasRecordedDeposit ? '서버에 기록된 내 예치 금액이에요.' : '준비 버튼을 누르면 서버가 금액을 다시 계산해 예치합니다.' : '정산 후 남은 포인트는 자동으로 환불돼요.'}</Text></View><PointBadge amount={deposit} /></Card>
     {room.dbStatus === 'READY_CHECK' ? <Text style={styles.helper}>준비 마감: {room.readyDeadlineAt ? new Date(room.readyDeadlineAt).toLocaleTimeString() : '확인 중'}</Text> : null}
     {error ? <ErrorNotice message={error} /> : null}
     {mode === 'mock' && room.status === 'confirmed' ? <Text style={styles.helper}>탑승을 완료했다면 아래 버튼으로 정산을 시작하세요.</Text> : null}

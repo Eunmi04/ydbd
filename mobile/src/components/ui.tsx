@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type Keyboard
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { colors, money, shortDate } from '../theme';
-import { mockService } from '../services/mockService';
+import { calculateReserveAmount } from '../services/creditPolicy';
 import type { Room, User } from '../types';
 
 export function Page({ title, subtitle, children, footer, back = false, eyebrow }: { title: string; subtitle?: string; children: React.ReactNode; footer?: React.ReactNode; back?: boolean; eyebrow?: string }) {
@@ -46,7 +46,7 @@ export function TextField({ label, value, onChangeText, placeholder, keyboardTyp
 }
 
 export function RoomCard({ room, onPress }: { room: Room; onPress: () => void }) {
-  const deposit = mockService.depositFor(room);
+  const deposit = calculateReserveAmount(room.estimatedFare, room.maxMembers);
   return <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.card, styles.roomCard, pressed && styles.pressed]}>
     <View style={styles.roomTop}><View style={[styles.statusPill, room.status === 'confirmed' && styles.statusConfirmed, room.status === 'settled' && styles.statusSettled]}><Text style={styles.statusText}>{room.status === 'recruiting' ? '모집 중' : room.status === 'confirmed' ? '출발 확정' : room.status === 'settled' ? '정산 완료' : '진행 중'}</Text></View><Text style={styles.roomTime}>{shortDate(room.departureAt)}</Text></View>
     <Text style={styles.roomRoute}>{room.departure} <Text style={styles.roomArrow}>→</Text> {room.destination}</Text>
