@@ -8,10 +8,14 @@ import { calculateReserveAmount } from '../services/creditPolicy';
 import type { Room, User } from '../types';
 
 export function Page({ title, subtitle, children, footer, back = false, eyebrow }: { title: string; subtitle?: string; children: React.ReactNode; footer?: React.ReactNode; back?: boolean; eyebrow?: string }) {
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  };
   return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
     <StatusBar style="dark" />
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pageContent} showsVerticalScrollIndicator={false}>
-      <View style={styles.topLine}>{back ? <Pressable accessibilityRole="button" accessibilityLabel="뒤로 가기" onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>‹</Text></Pressable> : <View style={styles.brandMark}><Text style={styles.brandMarkText}>↗</Text></View>}<Text style={styles.brandName}>같이타요</Text></View>
+      <View style={styles.topLine}>{back ? <Pressable accessibilityRole="button" accessibilityLabel="뒤로 가기" onPress={goBack} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>‹</Text></Pressable> : <View style={styles.brandMark}><Text style={styles.brandMarkText}>↗</Text></View>}<Text style={styles.brandName}>같이타요</Text></View>
       {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
       <Text style={styles.title}>{title}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}

@@ -4,6 +4,8 @@ import { mockService } from '../services/mockService';
 import { isValidEstimatedFare } from '../services/creditPolicy';
 import { isSupabaseConfigured, supabase } from '../services/supabaseClient';
 import { mutate, readCreditSummary } from '../services/capstoneApi';
+import { authErrorMessage, authSetupMessage, loadOrRepairProfile, validateLogin, validateSignup } from '../services/authService';
+import { profileInput, saveMyProfile } from '../services/profileService';
 import type { AppData, CreditLedgerRecord, CreditReservationRecord, Profile, Room, RoomMemberRecord, RoomRecord, Settlement, SettlementItemRecord, SettlementRecord, User } from '../types';
 
 type NewRoom = Pick<Room, 'departure' | 'destination' | 'departureAt' | 'maxMembers' | 'estimatedFare'>;
@@ -18,6 +20,11 @@ type AppContextValue = {
   mode: 'supabase' | 'mock';
   isLoading: boolean;
   isAuthenticated: boolean;
+  profile: Profile | null;
+  profileError: string;
+  retryProfile: () => void;
+  updateProfile: (nickname: string, school: string) => Promise<void>;
+  mockAuthEnabled: boolean;
   refreshRooms: () => Promise<void>;
   refreshCredits: () => Promise<void>;
   refreshSettlements: () => Promise<void>;
@@ -45,6 +52,7 @@ const emptyData = (): AppData => ({
   currentUserId: null, users: [], rooms: [], balances: {}, transactions: [], settlements: [],
 });
 const demoColor = '#8DBD99';
+const mockAuthEnabled = process.env.EXPO_PUBLIC_ENABLE_MOCK_AUTH === 'true';
 
 function legacyStatus(status: RoomRecord['status']): Room['status'] {
   if (status === 'OPEN') return 'recruiting';
@@ -71,8 +79,11 @@ function toLegacyRoom(record: RoomRecord, members: RoomMemberRecord[], reservati
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<AppData>(() => isSupabaseConfigured ? emptyData() : mockService.initialData());
+  const [data, setData] = useState<AppData>(() => isSupabaseConfigured || !mockAuthEnabled ? emptyData() : mockService.initialData());
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileError, setProfileError] = useState('');
+  const [profileAttempt, setProfileAttempt] = useState(0);
   const [heldCredit, setHeldCredit] = useState(0);
   const [creditLoading, setCreditLoading] = useState(isSupabaseConfigured);
   const [settlementRecords, setSettlementRecords] = useState<SettlementRecord[]>([]);
@@ -180,92 +191,124 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!supabase) return;
     let active = true;
-    supabase.auth.getSession().then(({ data: result }) => {
+    let receivedEvent = false;
+    const applyUser = (next: AuthUser | null) => {
       if (!active) return;
-      authUserIdRef.current = result.session?.user.id ?? null;
-      setAuthUser((previous) => previous?.id === result.session?.user.id ? previous : result.session?.user ?? null);
-      setData((previous) => previous.currentUserId === (result.session?.user.id ?? null)
-        ? previous : { ...emptyData(), currentUserId: result.session?.user.id ?? null });
+      if (authUserIdRef.current !== (next?.id ?? null)) {
+        setProfile(null);
+        setProfileError('');
+        setHeldCredit(0);
+        setCreditLoading(false);
+        setSettlementRecords([]);
+        setSettlementItems([]);
+        reservationsRef.current = [];
+        roomRefreshSeq.current++;
+        setData({ ...emptyData(), currentUserId: next?.id ?? null });
+      }
+      authUserIdRef.current = next?.id ?? null;
+      setAuthUser(next);
       setIsLoading(false);
-    }).catch(() => { if (active) setIsLoading(false); });
+    };
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!active) return;
-      authUserIdRef.current = session?.user.id ?? null;
-      setAuthUser((previous) => previous?.id === session?.user.id ? previous : session?.user ?? null);
-      setData((previous) => previous.currentUserId === (session?.user.id ?? null)
-        ? previous : { ...emptyData(), currentUserId: session?.user.id ?? null });
+      // Keep this callback synchronous; DB requests run in the profile effect.
+      receivedEvent = true;
+      applyUser(session?.user ?? null);
     });
+    void supabase.auth.getSession().then(({ data: result }) => {
+      if (!receivedEvent) applyUser(result.session?.user ?? null);
+    }).catch(() => { if (!receivedEvent) applyUser(null); });
     return () => { active = false; listener.subscription.unsubscribe(); };
   }, []);
 
   useEffect(() => {
-    if (!supabase || isLoading) return;
+    if (!supabase || !authUser) return;
     const client = supabase;
     const current = authUser;
     if (!current) return;
     let active = true;
     const load = async () => {
-      const { data: profileRow, error } = await client.from('profiles')
-        .select('*').eq('id', current.id).single();
-      if (!active || authUserIdRef.current !== current.id) return;
-      if (error) { console.warn('Profile load failed:', error.message); return; }
-      const profile = profileRow as Profile;
-      const me: User = {
-        id: profile.id, nickname: profile.nickname,
-        email: profile.email ?? current.email ?? '', color: demoColor,
-      };
-      setData((previous) => ({ ...previous, users: [me, ...previous.users.filter((item) => item.id !== me.id)] }));
+      try {
+        const loaded = await loadOrRepairProfile(client, current);
+        if (!active || authUserIdRef.current !== current.id) return;
+        const me: User = { id: loaded.id, nickname: loaded.nickname,
+          email: current.email ?? loaded.email ?? '', color: demoColor };
+        setProfile(loaded);
+        setProfileError('');
+        setData((previous) => ({ ...previous, users: [me, ...previous.users.filter((item) => item.id !== me.id)] }));
+      } catch (cause) {
+        if (active && authUserIdRef.current === current.id) setProfileError(authErrorMessage(cause));
+      }
     };
     void load();
     void refreshRooms().then(refreshSettlements)
       .catch((error) => console.warn('Room or settlement load failed:', error));
     void refreshCredits().catch((error) => console.warn('Credit load failed:', error));
     return () => { active = false; };
-  }, [authUser, isLoading, refreshRooms, refreshCredits, refreshSettlements]);
+  }, [authUser, profileAttempt, refreshRooms, refreshCredits, refreshSettlements]);
 
   const login = async (email: string, password: string) => {
+    validateLogin(email, password);
     if (supabase) {
-      const { data: result, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw error;
-      authUserIdRef.current = result.user.id;
-      setAuthUser(result.user);
-      setData({ ...emptyData(), currentUserId: result.user.id });
       return;
     }
+    if (!mockAuthEnabled) throw new Error(authSetupMessage);
     const nextUser = mockService.login(data.users, email, password);
     setData((previous) => ({ ...previous, currentUserId: nextUser.id }));
   };
   const register = async (nickname: string, email: string, password: string): Promise<boolean> => {
+    validateSignup(nickname, email, password, password);
     if (supabase) {
-      if (!nickname.trim() || nickname.trim().length > 40 || !email.includes('@') || password.length < 6) {
-        throw new Error('닉네임, 이메일, 6자 이상의 비밀번호를 입력해 주세요.');
-      }
       const { data: result, error } = await supabase.auth.signUp({
         email: email.trim(), password, options: { data: { nickname: nickname.trim() } },
       });
       if (error) throw error;
+      if (result.user?.identities?.length === 0) throw new Error('이미 가입된 이메일일 수 있습니다. 로그인하거나 확인 메일을 확인해 주세요.');
       if (result.session?.user) {
-        authUserIdRef.current = result.session.user.id;
-        setAuthUser(result.session.user);
-        setData({ ...emptyData(), currentUserId: result.session.user.id });
         return true;
       }
       return false; // Email confirmation is enabled in the Supabase project.
     }
+    if (!mockAuthEnabled) throw new Error(authSetupMessage);
     const nextUser = mockService.register(data.users, nickname, email, password);
     setData((previous) => ({ ...previous, users: [...previous.users, nextUser], balances: { ...previous.balances, [nextUser.id]: 15000 }, currentUserId: nextUser.id }));
     return true;
   };
   const logout = async () => {
     if (supabase) {
-      const { error } = await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
       if (error) throw error;
       authUserIdRef.current = null;
       setAuthUser(null);
+      setProfile(null);
+      setProfileError('');
+      setHeldCredit(0);
+      setCreditLoading(false);
+      setSettlementRecords([]);
+      setSettlementItems([]);
+      reservationsRef.current = [];
+      roomRefreshSeq.current++;
       setData(emptyData());
       return;
     }
     setData((previous) => ({ ...previous, currentUserId: null }));
+  };
+
+  const updateProfile = async (nickname: string, school: string) => {
+    const patch = profileInput(nickname, school);
+    const id = supabase ? authUserIdRef.current : user?.id;
+    if (!id) throw new Error('로그인이 필요합니다.');
+    if (supabase) {
+      const saved = await saveMyProfile(supabase, id, nickname, school);
+      if (authUserIdRef.current !== id) return;
+      setProfile(saved);
+      setData((previous) => ({ ...previous, users: previous.users.map((item) => item.id === id
+        ? { ...item, nickname: saved.nickname } : item) }));
+      return;
+    }
+    setData((previous) => ({ ...previous, users: previous.users.map((item) => item.id === id
+      ? { ...item, nickname: patch.nickname } : item) }));
   };
 
   const createRoom = async (input: NewRoom): Promise<string> => {
@@ -444,8 +487,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return <AppContext.Provider value={{
     data, user, balance, heldCredit, creditLoading, settlementRecords, settlementItems,
     mode: supabase ? 'supabase' : 'mock', isLoading,
+    profile, profileError, mockAuthEnabled,
+    retryProfile: () => { setProfileError(''); setProfileAttempt((attempt) => attempt + 1); },
     isAuthenticated: supabase ? Boolean(authUser) : Boolean(data.currentUserId),
-    refreshRooms, refreshCredits, refreshSettlements, login, register, logout, createRoom, joinRoom,
+    refreshRooms, refreshCredits, refreshSettlements, login, register, logout, updateProfile, createRoom, joinRoom,
     confirmRoom, prepareRoom, expireReadyCheck, cancelRoom, boardRoom, reportNoShow, charge, settleRoom,
     confirmSettlement, disputeSettlement, reviseFare, finalizeSettlement,
   }}>{children}</AppContext.Provider>;

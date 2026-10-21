@@ -57,6 +57,7 @@ export type Profile = {
   id: string; nickname: string; email: string | null; school_name: string | null;
   verification_status: VerificationStatus; account_status: AccountStatus;
   phone_visibility: PhoneVisibility; created_at: string; updated_at: string;
+  demo_verification?: boolean;
 };
 export type RoomRecord = {
   id: string; host_id: string; departure_text: string; destination_text: string;

@@ -5,8 +5,10 @@ import { AppButton, Card, EmptyState, ErrorNotice, InfoRow, Page, TextField } fr
 import { useApp } from '../../../state/AppContext';
 import { mockService } from '../../../services/mockService';
 import { colors, money } from '../../../theme';
+import { useServiceSync } from '../../../hooks/useServiceSync';
 
 export default function SettlementScreen() {
+  const syncError = useServiceSync();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, user, mode, settleRoom, settlementRecords, settlementItems,
     refreshSettlements, confirmSettlement, disputeSettlement, reviseFare, finalizeSettlement } = useApp();
@@ -65,7 +67,7 @@ export default function SettlementScreen() {
       onPress={() => void perform(() => finalizeSettlement(record.id, record.settlement_version))} /> : null}
     {record?.status === 'DISPUTED' ? <ErrorNotice message="이의 제기로 정산이 보류되었습니다. 방장이 요금·증빙을 수정하면 모두 다시 확인합니다." /> : null}
     {!record && !isHost ? <Text style={styles.note}>방장의 요금 입력을 기다리는 중입니다.</Text> : null}
-    {error ? <ErrorNotice message={error} /> : null}
+    {error || syncError ? <ErrorNotice message={error || syncError} /> : null}
     <Text style={styles.note}>실제 결제·송금은 일어나지 않습니다.</Text>
   </Page>;
   return <Page back eyebrow="SETTLEMENT" title="이제 정산해 볼까요?" subtitle="실제 택시 요금을 입력하면 자동으로 나눠요." footer={<AppButton label="정산 완료" onPress={submit} disabled={!isHost || !room.members.some((member) => member.userId === user?.id && member.boarded) || numericFare <= 0 || riders.length === 0 || share > deposit} />}>

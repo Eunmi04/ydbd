@@ -6,8 +6,10 @@ import KakaoMap from '../../components/KakaoMap.web';
 import { useApp } from '../../state/AppContext';
 import { calculateReserveAmount } from '../../services/creditPolicy';
 import { colors, money, shortDate } from '../../theme';
+import { useServiceSync } from '../../hooks/useServiceSync';
 
 export default function RoomDetail() {
+  const syncError = useServiceSync();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, user, mode, joinRoom, confirmRoom, prepareRoom, cancelRoom,
     expireReadyCheck, settlementRecords, refreshRooms } = useApp();
@@ -21,11 +23,11 @@ export default function RoomDetail() {
   useEffect(() => {
     if (mode !== 'supabase' || room?.dbStatus !== 'READY_CHECK' || !room.readyDeadlineAt) return;
     const deadline = new Date(room.readyDeadlineAt).getTime();
-    const timer = setInterval(() => {
-      if (Date.now() >= deadline) void expireReadyCheck(room.id).catch((cause) =>
+    const timer = setTimeout(() => {
+      void expireReadyCheck(room.id).catch((cause) =>
         setError(cause instanceof Error ? cause.message : '준비 기한을 갱신하지 못했습니다.'));
-    }, 5000);
-    return () => clearInterval(timer);
+    }, Math.max(250, deadline - Date.now() + 100));
+    return () => clearTimeout(timer);
   }, [mode, room?.id, room?.dbStatus, room?.readyDeadlineAt, expireReadyCheck]);
   if (!room) return <Page back title={loading ? '방을 불러오는 중' : '방을 찾을 수 없어요'}>
     {error ? <ErrorNotice message={error} /> : <EmptyState title={loading ? '잠시만 기다려 주세요' : '방이 없어요'} message={loading ? '서버에서 방 정보를 확인하고 있어요.' : '목록에서 다른 방을 찾아보세요.'} action="방 목록으로" onAction={() => router.replace('/(tabs)/rooms')} />}
@@ -67,6 +69,7 @@ export default function RoomDetail() {
                 : <AppButton label="현재 참여할 수 없는 방이에요" onPress={() => {}} disabled />
     : room.status === 'settled' ? <AppButton label="홈으로 돌아가기" onPress={() => router.replace('/(tabs)')} /> : !member ? <AppButton label={`참여하고 ${money(deposit)}P 예치하기`} onPress={join} disabled={room.status !== 'recruiting'} /> : room.status === 'recruiting' ? <><AppButton label="참여 완료 · 포인트 예치됨" onPress={() => {}} disabled />{isHost ? <AppButton label="방 확정하기" onPress={confirm} variant="orange" /> : null}</> : <AppButton label="탑승 확인하기" onPress={() => router.push({ pathname: '/ride/[id]/boarding', params: { id: room.id } })} />;
   return <Page back eyebrow="RIDE DETAIL" title={`${room.departure}에서\n${room.destination}까지`} subtitle={`${shortDate(room.departureAt)} 출발 · ${room.status === 'recruiting' ? '동승자 모집 중' : room.status === 'confirmed' ? '출발 확정' : room.status === 'settled' ? '정산 완료' : '진행 중'}`} footer={footer}>
+    {syncError ? <ErrorNotice message={syncError} /> : null}
     <KakaoMap departure={room.departure} destination={room.destination} />
     <Card><InfoRow label="출발지" value={room.departure} /><InfoRow label="목적지" value={room.destination} /><InfoRow label="출발 시간" value={shortDate(room.departureAt)} /><InfoRow label="현재 인원" value={`${room.dbStatus && !room.memberCountKnown ? '?' : room.members.length} / ${room.maxMembers}명`} /></Card>
     <Header title="함께 타는 사람" />
