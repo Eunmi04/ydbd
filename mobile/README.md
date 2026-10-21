@@ -1,6 +1,12 @@
 # 같이타요 모바일 앱
 
-택시 동승과 TEST 크레딧 정산을 시연하는 Expo 앱입니다. 환경변수를 설정하면 Supabase Auth·방·예치·정산 RPC와 원장 조회를 사용합니다. 실제 결제, 지도 API, 블록체인은 연결하지 않았습니다. SQL은 아직 실제 Supabase 프로젝트에 적용·검증되지 않았습니다.
+프로필 수정·방 생성·두 계정 준비/예치/정산 시연은 [서비스 시연 가이드](../docs/service-demo.md)를 참고하세요.
+
+회원가입·로그인 시연의 최신 설정·SQL 적용·검증 순서는 [인증 시연 가이드](../docs/auth-demo.md)를 참고하세요.
+기본 진입은 실제 Supabase 로그인입니다. Supabase 설정이 없을 때 로컬 시연을 쓰려면
+`mobile/.env`에 `EXPO_PUBLIC_ENABLE_MOCK_AUTH=true`를 명시해야 합니다.
+
+택시 동승과 TEST 크레딧 정산을 시연하는 Expo 앱입니다. 환경변수를 설정하면 Supabase Auth·방·예치·정산 RPC와 원장 조회를 사용합니다. 웹 카카오 지도·경로 조회 코드가 있으며 실제 결제·블록체인은 연결하지 않았습니다. SQL의 실제 Supabase 적용 상태는 별도 확인이 필요합니다.
 
 ## 실행
 
@@ -11,7 +17,7 @@ npm install
 npm start
 ```
 
-Supabase를 사용하려면 `.env.example`을 `mobile/.env`로 복사해 프로젝트 URL과 공개 anon/publishable 키를 채우고 앱을 다시 시작하세요. `EXPO_PUBLIC_KAKAO_MAP_KEY`는 지도 API를 연결할 때 사용할 자리표시자이며 현재 화면은 텍스트 기반 미리보기입니다. `service_role` 키는 절대 넣지 않습니다. DB에는 `supabase/migrations/`의 `001`~`011` 파일을 순서대로 적용하고, 개발용 네 계정은 [테스트 데이터 절차](../docs/test-data.md)를 따르세요. 두 Supabase 환경변수가 없으면 아래의 로컬 시연 모드로 실행됩니다. 실제 DB 검증 순서는 [통합 테스트](../docs/phase6-integration-test.md)에 있습니다.
+Supabase를 사용하려면 `.env.example`을 참고해 `mobile/.env`에 프로젝트 URL과 공개 anon/publishable 키를 채우고 앱을 다시 시작하세요. 기존 지도 키는 유지합니다. `service_role` 키는 절대 넣지 않습니다. DB에는 적용 이력을 확인하여 `supabase/migrations/`의 `001`~`013` 중 미적용 파일만 순서대로 적용합니다. 개발용 네 계정은 [테스트 데이터 절차](../docs/test-data.md)를 따르세요. 실제 DB 검증 순서는 [통합 테스트](../docs/phase6-integration-test.md)에 있습니다.
 
 Android 에뮬레이터가 준비되어 있으면 `npm run android`로 실행할 수 있습니다. 실제 Android 기기에서는 Expo Go에서 개발 서버의 QR 코드를 스캔하세요.
 

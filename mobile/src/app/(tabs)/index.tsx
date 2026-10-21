@@ -1,10 +1,12 @@
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { AppButton, Card, EmptyState, Header, Page, RoomCard } from '../../components/ui';
+import { AppButton, Card, EmptyState, ErrorNotice, Header, Page, RoomCard } from '../../components/ui';
+import { useServiceSync } from '../../hooks/useServiceSync';
 import { useApp } from '../../state/AppContext';
 import { colors, money, shortDate } from '../../theme';
 
 export default function Home() {
+  const syncError = useServiceSync();
   const { data, user, balance, mode, creditLoading } = useApp();
   const joined = data.rooms.find((room) => room.status !== 'settled' && room.dbStatus !== 'CANCELLED' && room.members.some((member) => member.userId === user?.id));
   const latest = data.settlements.filter((item) => item.userId === user?.id).slice(0, 2);
@@ -15,6 +17,7 @@ export default function Home() {
     {joined ? <RoomCard room={joined} onPress={() => router.push({ pathname: '/room/[id]', params: { id: joined.id } })} /> : <EmptyState title="참여 중인 방이 없어요" message="이동할 계획이 있다면 방을 찾아보세요." action="동승 방 찾기" onAction={() => router.push('/(tabs)/rooms')} />}
     <Header title="최근 정산" action="이용 내역" onAction={() => router.push('/(tabs)/my')} />
     <Card style={{ paddingVertical: 7 }}>{latest.map((item, index) => <View key={item.id} style={[styles.settlementRow, index < latest.length - 1 && styles.rowBorder]}><View style={styles.miniIcon}><Text style={styles.miniIconText}>✓</Text></View><View style={{ flex: 1 }}><Text style={styles.settlementTitle}>동승 정산 완료</Text><Text style={styles.settlementDate}>{shortDate(item.createdAt)}</Text></View><Text style={styles.settlementAmount}>-{money(item.share)}P</Text></View>)}</Card>
+    {syncError ? <ErrorNotice message={syncError} /> : null}
     <AppButton label="새로운 동승 시작하기" variant="ghost" onPress={() => router.push('/room/new')} />
   </Page>;
 }

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { supabase } from './supabaseClient';
+import { serviceErrorMessage } from './profileService';
 
 const pending = new Map<string, Promise<string>>();
 const storagePrefix = 'capstone:request:';
@@ -29,11 +30,11 @@ function client() {
   return supabase;
 }
 
-async function requestKey(operation: string, payload: Record<string, unknown>) {
+async function requestKey(operation: string, payload: Record<string, unknown>, userId: string) {
   const fingerprint = await Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify(payload),
   );
-  return storagePrefix + operation + ':' + fingerprint;
+  return storagePrefix + userId + ':' + operation + ':' + fingerprint;
 }
 
 async function getRequestId(key: string) {
@@ -57,12 +58,23 @@ export async function mutate<T extends Record<string, unknown>>(
   operation: string,
   payload: Record<string, unknown>,
 ): Promise<T> {
-  const key = await requestKey(operation, payload);
+  const api = client();
+  const sessionResult = await api.auth.getSession();
+  const userId = sessionResult.data.session?.user.id;
+  if (sessionResult.error || !userId) throw new Error('로그인이 만료되었습니다. 다시 로그인해 주세요.');
+  let key: string;
+  try { key = await requestKey(operation, payload, userId); }
+  catch { throw new Error('요청 ID를 준비하지 못했습니다. 웹에서는 localhost 또는 HTTPS 주소로 접속해 주세요.'); }
   const requestId = await getRequestId(key);
-  const { data, error } = await client().rpc(operation, { ...payload, p_request_id: requestId });
+  const currentSession = await api.auth.getSession();
+  if (currentSession.data.session?.user.id !== userId) throw new Error('로그인 계정이 변경되었습니다. 다시 시도해 주세요.');
+  const { data, error } = await api.rpc(operation, { ...payload, p_request_id: requestId });
   if (error) {
     const code = Object.keys(domainMessages).find((candidate) => error.message.includes(candidate));
-    throw new Error(code ? domainMessages[code] : error.message);
+    const message = code === 'ACCOUNT_RESTRICTED' && ['create_room', 'join_room'].includes(operation)
+      ? '현재 계정은 이용이 제한되어 있습니다. 방 생성·참여에는 ACTIVE 계정이 필요하며 본인 인증 완료는 필요하지 않습니다.'
+      : code ? domainMessages[code] : serviceErrorMessage(error);
+    throw new Error(message);
   }
   await AsyncStorage.removeItem(key);
   pending.delete(key);

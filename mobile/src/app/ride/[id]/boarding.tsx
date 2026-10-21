@@ -4,8 +4,10 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AppButton, Avatar, Card, EmptyState, ErrorNotice, Header, Page } from '../../../components/ui';
 import { useApp } from '../../../state/AppContext';
 import { colors, shortDate } from '../../../theme';
+import { useServiceSync } from '../../../hooks/useServiceSync';
 
 export default function Boarding() {
+  const syncError = useServiceSync();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, user, mode, boardRoom, reportNoShow } = useApp();
   const [error, setError] = useState('');
@@ -32,7 +34,7 @@ export default function Boarding() {
     <Header title="탑승 상태" />
     <Card style={{ paddingVertical: 4 }}>{room.members.map((item, index) => { const participant = data.users.find((person) => person.id === item.userId); if (!participant) return null; return <View key={item.userId} style={[styles.member, index < room.members.length - 1 && styles.border]}><Avatar user={participant} size={39} /><Text style={styles.name}>{participant.nickname}{participant.id === user?.id ? ' (나)' : ''}</Text><View style={[styles.status, item.boarded && styles.statusDone]}><Text style={[styles.statusText, item.boarded && styles.statusTextDone]}>{item.boarded ? '탑승 완료' : item.boardedStatus === 'NO_SHOW' ? '미탑승' : '확인 전'}</Text></View></View>; })}</Card>
     <Card style={styles.note}><Text style={styles.noteTitle}>안전하게 탑승하셨나요?</Text><Text style={styles.noteText}>탑승 상태를 확정한 뒤 방장이 요금과 샘플 증빙을 입력하고, 동승자가 확인해야 정산됩니다.</Text></Card>
-    {error ? <ErrorNotice message={error} /> : null}
+    {error || syncError ? <ErrorNotice message={error || syncError} /> : null}
   </Page>;
 }
 

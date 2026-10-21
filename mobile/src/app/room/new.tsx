@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import KakaoMap from '../../components/KakaoMap.web';
 import {
@@ -13,13 +13,20 @@ import {
 import { calculateReserveAmount, parseFareInput } from '../../services/creditPolicy';
 import { useApp } from '../../state/AppContext';
 import { colors, money } from '../../theme';
+import { serviceErrorMessage } from '../../services/profileService';
 
-const days = Array.from({ length: 7 }, (_, index) => {
+function departureDefaults() {
+  const next = new Date(Date.now() + 60 * 60 * 1000);
+  const today = new Date();
+  const days = Array.from({ length: 7 }, (_, index) => {
   const date = new Date();
   date.setDate(date.getDate() + index);
   date.setHours(0, 0, 0, 0);
   return date;
-});
+  });
+  return { days, day: next.toDateString() === today.toDateString() ? 0 : 1,
+    hour: String(next.getHours()).padStart(2, '0'), minute: String(next.getMinutes()).padStart(2, '0') };
+}
 
 function isFutureDeparture(date: Date): boolean {
   return date.getTime() > Date.now();
@@ -27,20 +34,24 @@ function isFutureDeparture(date: Date): boolean {
 
 export default function NewRoom() {
   const { createRoom, mode } = useApp();
+  const [defaults] = useState(departureDefaults);
+  const days = defaults.days;
   const [departure, setDeparture] = useState('');
   const [destination, setDestination] = useState('');
-  const [selectedDay, setSelectedDay] = useState(0);
-  const [hour, setHour] = useState('18');
-  const [minute, setMinute] = useState('30');
+  const [selectedDay, setSelectedDay] = useState(defaults.day);
+  const [hour, setHour] = useState(defaults.hour);
+  const [minute, setMinute] = useState(defaults.minute);
   const [maxMembers, setMaxMembers] = useState(4);
   const [fare, setFare] = useState('12000');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const fareResult = parseFareInput(fare);
   const numericFare = fareResult.value;
   const deposit = numericFare === null ? null : calculateReserveAmount(numericFare, maxMembers);
   const submit = async () => {
-    if (busy) return;
+    if (submitting.current) return;
+    setError('');
     if (numericFare === null) {
       setError(fareResult.error);
       return;
@@ -48,7 +59,7 @@ export default function NewRoom() {
     const h = Number(hour);
     const m = Number(minute);
     if (
-      !Number.isInteger(h) ||
+      !/^\d{1,2}$/.test(hour) || !/^\d{1,2}$/.test(minute) || !Number.isInteger(h) ||
       h < 0 ||
       h > 23 ||
       !Number.isInteger(m) ||
@@ -64,6 +75,7 @@ export default function NewRoom() {
       setError('현재 시간 이후로 출발 시간을 선택해 주세요.');
       return;
     }
+    submitting.current = true;
     setBusy(true);
     try {
       const id = await createRoom({
@@ -75,10 +87,9 @@ export default function NewRoom() {
       });
       router.replace({ pathname: '/room/[id]', params: { id } });
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : '방을 만들지 못했습니다.',
-      );
+      setError(serviceErrorMessage(cause));
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
@@ -122,6 +133,8 @@ export default function NewRoom() {
           {days.map((day, index) => (
             <Pressable
               key={index}
+              accessibilityRole="button"
+              accessibilityState={{ selected: selectedDay === index }}
               onPress={() => setSelectedDay(index)}
               style={({ pressed }) => [
                 styles.chip,
@@ -172,6 +185,8 @@ export default function NewRoom() {
           {[2, 3, 4].map((count) => (
             <Pressable
               key={count}
+              accessibilityRole="button"
+              accessibilityState={{ selected: maxMembers === count }}
               onPress={() => setMaxMembers(count)}
               style={({ pressed }) => [
                 styles.memberChip,
