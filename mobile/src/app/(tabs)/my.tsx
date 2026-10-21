@@ -8,84 +8,16 @@ import {
   ErrorNotice,
   Header,
   Page,
-  TextField,
 } from '../../components/ui'
 import { useApp } from '../../state/AppContext'
 import { colors, money, shortDate } from '../../theme'
 import { authErrorMessage } from '../../services/authService'
 import {
-  serviceErrorMessage,
   verificationLabel,
 } from '../../services/profileService'
 
-function ProfileEditor({
-  nickname,
-  school,
-  onSave,
-}: {
-  nickname: string
-  school: string
-  onSave: (nickname: string, school: string) => Promise<void>
-}) {
-  const [name, setName] = useState(nickname)
-  const [schoolName, setSchoolName] = useState(school)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const saving = useRef(false)
-  const submit = async () => {
-    if (saving.current) return
-    saving.current = true
-    setBusy(true)
-    setError('')
-    setNotice('')
-    try {
-      await onSave(name, schoolName)
-      setNotice('회원 정보를 저장했습니다.')
-    } catch (cause) {
-      setError(serviceErrorMessage(cause))
-    } finally {
-      saving.current = false
-      setBusy(false)
-    }
-  }
-  return (
-    <Card>
-      <TextField
-        label="닉네임"
-        value={name}
-        onChangeText={(value) => {
-          setName(value)
-          setNotice('')
-        }}
-        placeholder="1~40자"
-      />
-      <TextField
-        label="학교명"
-        value={schoolName}
-        onChangeText={(value) => {
-          setSchoolName(value)
-          setNotice('')
-        }}
-        placeholder="학교명 (선택)"
-      />
-      {error ? <ErrorNotice message={error} /> : null}
-      {notice ? (
-        <Text accessibilityRole="alert" style={styles.email}>
-          {notice}
-        </Text>
-      ) : null}
-      <AppButton
-        label={busy ? '저장 중…' : '내 정보 저장'}
-        onPress={submit}
-        disabled={busy}
-      />
-    </Card>
-  )
-}
-
 export default function MyPage() {
-  const { data, user, logout, mode, profile, updateProfile } = useApp()
+  const { data, user, logout, mode, profile } = useApp()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const submitting = useRef(false)
@@ -127,20 +59,6 @@ export default function MyPage() {
           ? '로컬 시연 계정 · 본인 인증 미완료'
           : verificationLabel(profile)}
       </Text>
-      {mode === 'supabase' && user ? (
-        <>
-          <Header title="내 정보 수정" />
-          <Text style={styles.email}>
-            이메일과 인증 상태는 조회만 가능합니다.
-          </Text>
-          <ProfileEditor
-            key={user.id}
-            nickname={profile?.nickname ?? user.nickname}
-            school={profile?.school_name ?? ''}
-            onSave={updateProfile}
-          />
-        </>
-      ) : null}
       {profile && profile.account_status !== 'ACTIVE' ? (
         <ErrorNotice message="이용이 제한된 계정입니다. 관리자에게 문의해 주세요." />
       ) : null}
@@ -202,6 +120,10 @@ export default function MyPage() {
       </Card>
       <Header title="설정" />
       <Card style={{ paddingVertical: 5 }}>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.menu}>
+          <Text style={styles.menuText}>회원 설정 · 개인정보 수정</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
         <Pressable
           onPress={() =>
             Alert.alert('알림 설정', '시연용 앱에서 알림 기능을 준비 중입니다.')

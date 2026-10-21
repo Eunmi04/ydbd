@@ -36,6 +36,7 @@ function Navigation() {
     </Stack.Protected>
     <Stack.Protected guard={isAuthenticated}>
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="settings" />
       <Stack.Screen name="room/new" />
       <Stack.Screen name="room/[id]" />
       <Stack.Screen name="ride/[id]/boarding" />

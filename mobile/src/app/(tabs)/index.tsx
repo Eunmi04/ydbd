@@ -1,25 +1,64 @@
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Platform, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { AppButton, Card, EmptyState, ErrorNotice, Header, Page, RoomCard } from '../../components/ui';
+import { TaxiDoodle } from '../../components/TaxiDoodle';
 import { useServiceSync } from '../../hooks/useServiceSync';
 import { useApp } from '../../state/AppContext';
 import { colors, money, shortDate } from '../../theme';
 
 export default function Home() {
   const syncError = useServiceSync();
-  const { data, user, balance, mode, creditLoading } = useApp();
-  const joined = data.rooms.find((room) => room.status !== 'settled' && room.dbStatus !== 'CANCELLED' && room.members.some((member) => member.userId === user?.id));
-  const latest = data.settlements.filter((item) => item.userId === user?.id).slice(0, 2);
-  return <Page eyebrow="GOOD DAY" title={`${user?.nickname ?? '친구'}님, 함께 가요!`} subtitle="같은 방향의 이웃과 이동을 나눠 보세요.">
-    <Card style={styles.balanceCard}><View><Text style={styles.balanceLabel}>{mode === 'supabase' ? '사용 가능 TEST 크레딧' : '내 포인트'}</Text><Text style={styles.balanceAmount}>{mode === 'supabase' && creditLoading ? '조회 중' : money(balance)}<Text style={styles.balanceUnit}> P</Text></Text><Text style={styles.balanceHint}>{mode === 'supabase' ? '실제 돈이 아닌 시연용 크레딧입니다.' : '동승 예약에 바로 사용할 수 있어요'}</Text></View><Pressable accessibilityRole="button" onPress={() => router.push('/(tabs)/wallet')} style={({ pressed }) => [styles.balanceGo, pressed && { opacity: 0.6 }]}><Text style={styles.balanceGoText}>↗</Text></Pressable></Card>
-    <View style={styles.actions}><Pressable onPress={() => router.push('/(tabs)/rooms')} style={({ pressed }) => [styles.actionCard, pressed && styles.pressed]}><Text style={styles.actionIcon}>⌕</Text><Text style={styles.actionTitle}>동승 방 찾기</Text><Text style={styles.actionSub}>내 경로와 맞는 방 찾기</Text></Pressable><Pressable onPress={() => router.push('/room/new')} style={({ pressed }) => [styles.actionCard, styles.actionOrange, pressed && styles.pressed]}><Text style={styles.actionIcon}>＋</Text><Text style={styles.actionTitle}>동승 방 만들기</Text><Text style={styles.actionSub}>시간과 경로를 정해서 모집</Text></Pressable></View>
-    <Header title="참여 중인 방" action="전체 보기" onAction={() => router.push('/(tabs)/rooms')} />
-    {joined ? <RoomCard room={joined} onPress={() => router.push({ pathname: '/room/[id]', params: { id: joined.id } })} /> : <EmptyState title="참여 중인 방이 없어요" message="이동할 계획이 있다면 방을 찾아보세요." action="동승 방 찾기" onAction={() => router.push('/(tabs)/rooms')} />}
-    <Header title="최근 정산" action="이용 내역" onAction={() => router.push('/(tabs)/my')} />
-    <Card style={{ paddingVertical: 7 }}>{latest.map((item, index) => <View key={item.id} style={[styles.settlementRow, index < latest.length - 1 && styles.rowBorder]}><View style={styles.miniIcon}><Text style={styles.miniIconText}>✓</Text></View><View style={{ flex: 1 }}><Text style={styles.settlementTitle}>동승 정산 완료</Text><Text style={styles.settlementDate}>{shortDate(item.createdAt)}</Text></View><Text style={styles.settlementAmount}>-{money(item.share)}P</Text></View>)}</Card>
+  const { data, user, balance, mode } = useApp();
+  const { width } = useWindowDimensions();
+  const desktop = Platform.OS === 'web' && width >= 850;
+  const [departure, setDeparture] = useState('');
+  const [destination, setDestination] = useState('');
+  const joined = data.rooms.find(room => room.status !== 'settled' && room.dbStatus !== 'CANCELLED' && room.members.some(member => member.userId === user?.id));
+  const rooms = data.rooms.filter(room => room.status === 'recruiting').slice(0, 3);
+  const latest = data.settlements.filter(item => item.userId === user?.id).slice(0, 2);
+  const search = () => router.push({ pathname: '/(tabs)/rooms', params: { q: `${departure.trim()} ${destination.trim()}`.trim() } });
+  return <Page wide hideHeading title="같은 방향이면, 같이 타요">
+    <View style={[styles.hero, desktop && styles.heroDesktop]}>
+      <View style={[styles.heroCopy, desktop && { flex: 1 }]}>
+        <Text style={styles.welcome}>{user?.nickname ?? '친구'}님, 오늘은 어디로 가세요?</Text>
+        <Text style={[styles.heroTitle, desktop && styles.heroTitleDesktop]}>같은 방향이면,{"\n"}같이 타요<Text style={styles.dot}>.</Text></Text>
+        <Text style={styles.heroDescription}>같은 길로 가는 사람을 찾아{"\n"}택시를 함께 타고, 요금은 나눠요.</Text>
+        <View style={styles.heroActions}><View style={{ flex: 1 }}><AppButton label="동승 찾기" onPress={() => router.push('/(tabs)/rooms')} /></View><View style={{ flex: 1 }}><AppButton label="방 만들기" variant="ghost" onPress={() => router.push('/room/new')} /></View></View>
+      </View>
+      <View style={[styles.heroArt, desktop && { flex: 1.1, width: 'auto' }]}><TaxiDoodle /></View>
+    </View>
+    <Card style={[styles.search, desktop && styles.searchDesktop]}>
+      <View style={styles.searchField}><Text style={styles.searchLabel}>◎  출발지</Text><TextInput accessibilityLabel="찾을 출발지" value={departure} onChangeText={setDeparture} placeholder="어디에서 출발하나요?" placeholderTextColor="#989A94" style={styles.searchInput} /></View>
+      <View style={styles.searchField}><Text style={styles.searchLabel}>♧  도착지</Text><TextInput accessibilityLabel="찾을 도착지" value={destination} onChangeText={setDestination} placeholder="어디로 가시나요?" placeholderTextColor="#989A94" style={styles.searchInput} /></View>
+      <View style={styles.capacity}><Text style={styles.searchLabel}>☺  함께 타는 인원</Text><Text style={styles.searchHint}>최대 4명 · 2명부터 출발</Text></View>
+      <AppButton label="같이 탈 방 찾기  ↗" onPress={search} />
+    </Card>
+    <View style={styles.section}><Header title="지금 모집 중인 방" action="더보기" onAction={() => router.push('/(tabs)/rooms')} />
+      {rooms.length ? <View style={[styles.roomGrid, desktop && styles.roomGridDesktop]}>{rooms.map(room => <View key={room.id} style={styles.roomCell}><RoomCard room={room} onPress={() => router.push({ pathname: '/room/[id]', params: { id: room.id } })} /></View>)}</View>
+        : <EmptyState title="첫 번째 동승을 시작해 볼까요?" message="같은 방향으로 갈 사람을 기다리는 방을 만들어 보세요." action="방 만들기" onAction={() => router.push('/room/new')} />}
+    </View>
+    <View style={[styles.overview, desktop && { flexDirection: 'row' }]}>
+      <Card style={styles.wallet}><Text style={styles.smallTitle}>{mode === 'supabase' ? '사용 가능 TEST 크레딧' : '내 포인트'}</Text><Text style={styles.walletAmount}>{money(balance)}<Text style={styles.unit}> P</Text></Text><Text style={styles.helper}>함께 타는 이동을 준비해요.</Text><AppButton label="내 지갑 보기  ↗" variant="ghost" onPress={() => router.push('/(tabs)/wallet')} /></Card>
+      <View style={styles.joined}><Header title="참여 중인 방" />{joined ? <RoomCard room={joined} onPress={() => router.push({ pathname: '/room/[id]', params: { id: joined.id } })} /> : <Card><Text style={styles.helper}>아직 참여 중인 방이 없어요. 마음에 드는 방을 찾아보세요.</Text></Card>}</View>
+    </View>
+    <Card style={styles.banner}><View style={styles.bannerCopy}><Text style={styles.bannerTitle}>처음이신가요?</Text><Text style={styles.helper}>방을 찾고, 함께 준비하고, 이동 후 요금을 나눠요.</Text></View><AppButton label="내 이용 내역  ›" variant="secondary" onPress={() => router.push('/(tabs)/my')} /></Card>
+    {latest.length ? <View style={styles.section}><Header title="최근 정산" />{latest.map(item => <Card key={item.id} style={styles.history}><View><Text style={styles.smallTitle}>함께 탄 택시 · 정산 완료</Text><Text style={styles.helper}>{shortDate(item.createdAt)}</Text></View><AppButton label={`${money(item.share)}P  ↗`} variant="ghost" onPress={() => router.push({ pathname: '/history/[id]', params: { id: item.id } })} /></Card>)}</View> : null}
     {syncError ? <ErrorNotice message={syncError} /> : null}
-    <AppButton label="새로운 동승 시작하기" variant="ghost" onPress={() => router.push('/room/new')} />
   </Page>;
 }
-
-const styles = StyleSheet.create({ balanceCard: { backgroundColor: colors.green, borderColor: colors.green, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 22, minHeight: 160 }, balanceLabel: { color: '#E5F3E7', fontSize: 13, fontWeight: '700' }, balanceAmount: { color: 'white', fontSize: 36, fontWeight: '900', letterSpacing: -1.6, marginTop: 6 }, balanceUnit: { fontSize: 22 }, balanceHint: { color: '#E1F0E5', fontSize: 11, marginTop: 8 }, balanceGo: { width: 38, height: 38, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.17)', alignItems: 'center', justifyContent: 'center' }, balanceGoText: { color: 'white', fontSize: 24, fontWeight: '800' }, actions: { flexDirection: 'row', gap: 10 }, actionCard: { flex: 1, minHeight: 128, backgroundColor: colors.greenPale, borderRadius: 20, padding: 17, justifyContent: 'center' }, actionOrange: { backgroundColor: colors.orangePale }, actionIcon: { color: colors.green, fontSize: 26, fontWeight: '800', height: 32 }, actionTitle: { color: colors.ink, fontSize: 15, fontWeight: '800', marginTop: 4 }, actionSub: { color: colors.muted, fontSize: 10, marginTop: 5 }, pressed: { opacity: 0.7, transform: [{ scale: 0.98 }] }, settlementRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 13 }, rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border }, miniIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: colors.greenPale, alignItems: 'center', justifyContent: 'center' }, miniIconText: { color: colors.green, fontWeight: '900' }, settlementTitle: { color: colors.ink, fontSize: 13, fontWeight: '700' }, settlementDate: { color: colors.muted, fontSize: 11, marginTop: 3 }, settlementAmount: { color: colors.ink, fontSize: 14, fontWeight: '800' } });
+const styles = StyleSheet.create({
+  hero: { paddingVertical: 22, gap: 16 }, heroDesktop: { flexDirection: 'row', alignItems: 'center', paddingTop: 35, paddingBottom: 50 },
+  heroCopy: { minWidth: 0 }, welcome: { color: colors.muted, fontSize: 13, marginBottom: 22 },
+  heroTitle: { color: colors.ink, fontSize: 42, lineHeight: 56, fontWeight: '900', letterSpacing: -2.8 }, heroTitleDesktop: { fontSize: 67, lineHeight: 81, letterSpacing: -4 },
+  dot: { color: colors.lime }, heroDescription: { color: colors.ink, fontSize: 18, lineHeight: 30, marginTop: 20 },
+  heroActions: { flexDirection: 'row', maxWidth: 385, gap: 12, marginTop: 30 }, heroArt: { width: '100%', minWidth: 0 },
+  search: { gap: 20, padding: 25, marginTop: 5, borderWidth: 0 }, searchDesktop: { flexDirection: 'row', alignItems: 'center' },
+  searchField: { flex: 1, gap: 10 }, searchLabel: { fontSize: 13, fontWeight: '800', color: colors.ink }, searchInput: { fontSize: 13, color: colors.ink, paddingVertical: 5, minHeight: 32 },
+  capacity: { gap: 14, paddingRight: 12 }, searchHint: { color: colors.muted, fontSize: 12 },
+  section: { gap: 18, marginTop: 27 }, roomGrid: { gap: 16 }, roomGridDesktop: { flexDirection: 'row' }, roomCell: { flex: 1, minWidth: 0 },
+  overview: { gap: 22, marginTop: 22 }, wallet: { flex: 1, backgroundColor: colors.greenPale, gap: 14 }, joined: { flex: 1.6, gap: 12 },
+  smallTitle: { fontSize: 14, color: colors.ink, fontWeight: '800' }, walletAmount: { color: colors.ink, fontSize: 36, fontWeight: '900' }, unit: { fontSize: 20 },
+  helper: { fontSize: 12, color: colors.muted, lineHeight: 21 }, banner: { backgroundColor: '#EDEBE2', flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 20, marginTop: 18 },
+  bannerCopy: { flex: 1, minWidth: 170, gap: 8 }, bannerTitle: { fontSize: 21, fontWeight: '800', color: colors.ink }, history: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+});

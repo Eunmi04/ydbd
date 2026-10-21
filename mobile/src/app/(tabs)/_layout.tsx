@@ -1,11 +1,13 @@
 import { Tabs } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
+import { Platform, StyleSheet, Text, useWindowDimensions } from 'react-native';
 import { colors } from '../../theme';
 
 const tabIcon = (glyph: string, focused: boolean) => <Text style={[styles.icon, focused && styles.iconActive]}>{glyph}</Text>;
 
 export default function TabLayout() {
-  return <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: colors.greenDark, tabBarInactiveTintColor: colors.muted, tabBarStyle: styles.bar, tabBarLabelStyle: styles.label }}>
+  const { width } = useWindowDimensions();
+  const desktop = Platform.OS === 'web' && width >= 850;
+  return <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: colors.ink, tabBarInactiveTintColor: colors.muted, tabBarStyle: desktop ? { display: 'none' } : styles.bar, tabBarLabelStyle: styles.label }}>
     <Tabs.Screen name="index" options={{ title: '홈', tabBarIcon: ({ focused }) => tabIcon('⌂', focused) }} />
     <Tabs.Screen name="rooms" options={{ title: '방 찾기', tabBarIcon: ({ focused }) => tabIcon('⌕', focused) }} />
     <Tabs.Screen name="wallet" options={{ title: '지갑', tabBarIcon: ({ focused }) => tabIcon('◉', focused) }} />

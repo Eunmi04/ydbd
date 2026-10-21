@@ -1,21 +1,28 @@
 import { useMemo, useState } from 'react';
-import { router } from 'expo-router';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Platform, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { AppButton, EmptyState, ErrorNotice, Header, Page, RoomCard } from '../../components/ui';
 import { useServiceSync } from '../../hooks/useServiceSync';
 import { useApp } from '../../state/AppContext';
 import { colors } from '../../theme';
 
 export default function Rooms() {
+  const { q } = useLocalSearchParams<{ q?: string }>();
+  return <RoomResults key={q ?? ''} initialQuery={q ?? ''} />;
+}
+
+function RoomResults({ initialQuery }: { initialQuery: string }) {
   const syncError = useServiceSync();
   const { data } = useApp();
-  const [query, setQuery] = useState('');
-  const filtered = useMemo(() => data.rooms.filter((room) => room.status !== 'settled' && room.dbStatus !== 'CANCELLED' && `${room.departure} ${room.destination}`.toLowerCase().includes(query.trim().toLowerCase())), [data.rooms, query]);
-  return <Page eyebrow="FIND YOUR RIDE" title="같이 갈 방을 찾아요" subtitle="출발지나 목적지를 검색해 보세요.">
+  const [query, setQuery] = useState(initialQuery);
+  const { width } = useWindowDimensions();
+  const desktop = Platform.OS === 'web' && width >= 850;
+  const filtered = useMemo(() => data.rooms.filter((room) => room.status !== 'settled' && room.dbStatus !== 'CANCELLED' && query.trim().toLowerCase().split(/\s+/).every(word => `${room.departure} ${room.destination}`.toLowerCase().includes(word))), [data.rooms, query]);
+  return <Page wide eyebrow="FIND YOUR RIDE" title="같이 갈 방을 찾아요" subtitle="최대 4명, 방장을 포함해 2명부터 함께 출발해요.">
     <View style={styles.search}><Text style={styles.searchIcon}>⌕</Text><TextInput value={query} onChangeText={setQuery} placeholder="예: 삼송역, 화정역" placeholderTextColor="#9BA89C" style={styles.searchInput} returnKeyType="search" /></View>
     {syncError ? <ErrorNotice message={syncError} /> : null}
     <Header title={`동승 방 ${filtered.length}개`} action="방 만들기" onAction={() => router.push('/room/new')} />
-    {filtered.length ? filtered.map((room) => <RoomCard key={room.id} room={room} onPress={() => router.push({ pathname: '/room/[id]', params: { id: room.id } })} />) : <EmptyState title="검색 결과가 없어요" message="다른 장소로 검색하거나 직접 방을 만들어 보세요." action="방 만들기" onAction={() => router.push('/room/new')} />}
+    {filtered.length ? <View style={{ flexDirection: desktop ? 'row' : 'column', flexWrap: 'wrap', gap: 18 }}>{filtered.map((room) => <View key={room.id} style={desktop ? { width: '31.8%' } : { width: '100%' }}><RoomCard room={room} onPress={() => router.push({ pathname: '/room/[id]', params: { id: room.id } })} /></View>)}</View> : <EmptyState title="검색 결과가 없어요" message="다른 장소로 검색하거나 직접 방을 만들어 보세요." action="방 만들기" onAction={() => router.push('/room/new')} />}
     <AppButton label="＋  동승 방 만들기" variant="secondary" onPress={() => router.push('/room/new')} />
   </Page>;
 }

@@ -1,13 +1,16 @@
 import React from 'react';
 import { router } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type KeyboardTypeOptions, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type KeyboardTypeOptions, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { colors, money, shortDate } from '../theme';
 import { calculateReserveAmount } from '../services/creditPolicy';
 import type { Room, User } from '../types';
+import { SiteHeader } from './SiteHeader';
 
-export function Page({ title, subtitle, children, footer, back = false, eyebrow }: { title: string; subtitle?: string; children: React.ReactNode; footer?: React.ReactNode; back?: boolean; eyebrow?: string }) {
+export function Page({ title, subtitle, children, footer, back = false, eyebrow, wide = false, hideHeading = false }: { title: string; subtitle?: string; children: React.ReactNode; footer?: React.ReactNode; back?: boolean; eyebrow?: string; wide?: boolean; hideHeading?: boolean }) {
+  const { width } = useWindowDimensions();
+  const desktop = Platform.OS === 'web' && width >= 850;
   const goBack = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/');
@@ -15,18 +18,25 @@ export function Page({ title, subtitle, children, footer, back = false, eyebrow 
   return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
     <StatusBar style="dark" />
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pageContent} showsVerticalScrollIndicator={false}>
-      <View style={styles.topLine}>{back ? <Pressable accessibilityRole="button" accessibilityLabel="뒤로 가기" onPress={goBack} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>‹</Text></Pressable> : <View style={styles.brandMark}><Text style={styles.brandMarkText}>↗</Text></View>}<Text style={styles.brandName}>같이타요</Text></View>
-      {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-      <View style={styles.body}>{children}</View>
+      <SiteHeader desktop={desktop} />
+      <View style={[styles.pageInner, { maxWidth: wide ? 1200 : 780 }, desktop && styles.pageDesktop]}>
+        {back ? <Pressable accessibilityRole="button" accessibilityLabel="뒤로 가기" onPress={goBack} style={styles.backLink}><Text style={styles.backLinkText}>‹  뒤로 가기</Text></Pressable> : null}
+        {!hideHeading ? <>
+          {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+          <Text style={[styles.title, desktop && styles.desktopTitle]}>{title}<Text style={styles.titleDot}>.</Text></Text>
+          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        </> : null}
+        <View style={[styles.body, hideHeading && { marginTop: 0 }]}>{children}</View>
+        {footer && desktop ? <View style={styles.desktopFooter}>{footer}</View> : null}
+        {desktop ? <View style={styles.siteFooter}><Text style={styles.footerBrand}>같이타요.</Text><Text style={styles.footerCopy}>같은 방향의 우리, 더 가벼운 이동.</Text></View> : null}
+      </View>
     </ScrollView>
-    {footer ? <View style={styles.footer}>{footer}</View> : null}
+    {footer && !desktop ? <View style={styles.footer}>{footer}</View> : null}
   </SafeAreaView>;
 }
 
 export function AppButton({ label, onPress, variant = 'primary', disabled = false, style }: { label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'ghost' | 'orange'; disabled?: boolean; style?: StyleProp<ViewStyle> }) {
-  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, styles[`button_${variant}`], disabled && styles.buttonDisabled, pressed && styles.pressed, style]}><Text style={[styles.buttonText, variant === 'secondary' && styles.buttonTextSecondary, variant === 'ghost' && styles.buttonTextGhost]}>{label}</Text></Pressable>;
+  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, styles[`button_${variant}`], disabled && styles.buttonDisabled, pressed && styles.pressed, style]}><Text style={[styles.buttonText, variant === 'secondary' && styles.buttonTextSecondary, variant === 'ghost' && styles.buttonTextGhost, variant === 'orange' && { color: colors.ink }]}>{label}</Text></Pressable>;
 }
 
 export function Card({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
@@ -51,9 +61,11 @@ export function TextField({ label, value, onChangeText, placeholder, keyboardTyp
 
 export function RoomCard({ room, onPress }: { room: Room; onPress: () => void }) {
   const deposit = calculateReserveAmount(room.estimatedFare, room.maxMembers);
+  const known = !room.dbStatus || room.memberCountKnown;
   return <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.card, styles.roomCard, pressed && styles.pressed]}>
     <View style={styles.roomTop}><View style={[styles.statusPill, room.status === 'confirmed' && styles.statusConfirmed, room.status === 'settled' && styles.statusSettled]}><Text style={styles.statusText}>{room.status === 'recruiting' ? '모집 중' : room.status === 'confirmed' ? '출발 확정' : room.status === 'settled' ? '정산 완료' : '진행 중'}</Text></View><Text style={styles.roomTime}>{shortDate(room.departureAt)}</Text></View>
     <Text style={styles.roomRoute}>{room.departure} <Text style={styles.roomArrow}>→</Text> {room.destination}</Text>
+    <View style={styles.seats}>{Array.from({ length: room.maxMembers }, (_, index) => <View key={index} style={[styles.seat, known && index < room.members.length && styles.seatFilled]}><Text style={styles.seatFace}>{known && index < room.members.length ? '☺' : '·'}</Text></View>)}</View>
     <View style={styles.roomBottom}><Text style={styles.roomMeta}>함께 타는 사람 {room.dbStatus && !room.memberCountKnown ? '?' : room.members.length}/{room.maxMembers}</Text><Text style={styles.roomDeposit}>{money(deposit)}P {room.dbStatus ? '예치 예상' : '예치'}</Text></View>
   </Pressable>;
 }
@@ -75,12 +87,20 @@ export function InfoRow({ label, value, strong = false }: { label: string; value
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.cream }, pageContent: { paddingHorizontal: 22, paddingTop: 10, paddingBottom: 34, flexGrow: 1 },
+  safe: { flex: 1, backgroundColor: colors.cream }, pageContent: { flexGrow: 1, paddingBottom: 24 },
+  pageInner: { width: '100%', alignSelf: 'center', paddingHorizontal: 22, paddingTop: 18 },
+  pageDesktop: { paddingHorizontal: 28, paddingTop: 30 }, desktopTitle: { fontSize: 42, lineHeight: 52, letterSpacing: -2 },
+  titleDot: { color: colors.lime },
+  backLink: { alignSelf: 'flex-start', paddingVertical: 8, marginBottom: 16 }, backLinkText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
+  desktopFooter: { marginTop: 24, gap: 10 }, siteFooter: { marginTop: 65, paddingVertical: 25, borderTopWidth: 1, borderTopColor: colors.border, flexDirection: 'row', justifyContent: 'space-between' },
+  footerBrand: { color: colors.ink, fontSize: 15, fontWeight: '900' }, footerCopy: { color: colors.muted, fontSize: 12 },
+  seats: { flexDirection: 'row', gap: 7, marginVertical: 4 }, seat: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderStyle: 'dashed', borderColor: '#D6D4CB', alignItems: 'center', justifyContent: 'center' },
+  seatFilled: { backgroundColor: colors.greenPale, borderColor: '#A4C58A', borderStyle: 'solid' }, seatFace: { fontSize: 23, color: colors.ink },
   topLine: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 48, marginBottom: 26 }, brandMark: { width: 30, height: 30, borderRadius: 10, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' }, brandMarkText: { color: 'white', fontSize: 20, fontWeight: '800', marginTop: -2 }, brandName: { color: colors.greenDark, fontSize: 18, fontWeight: '800', letterSpacing: -0.7 }, back: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.greenPale }, backText: { color: colors.greenDark, fontSize: 30, lineHeight: 31, marginTop: -4 },
   eyebrow: { color: colors.green, fontSize: 12, fontWeight: '800', letterSpacing: 1.8, marginBottom: 8 }, title: { color: colors.ink, fontSize: 29, fontWeight: '800', lineHeight: 38, letterSpacing: -1.3 }, subtitle: { color: colors.muted, fontSize: 14, lineHeight: 22, marginTop: 7 }, body: { marginTop: 26, gap: 16, flex: 1 },
   footer: { paddingHorizontal: 22, paddingTop: 12, paddingBottom: 18, backgroundColor: colors.cream, borderTopWidth: 1, borderTopColor: colors.border, gap: 9 },
-  button: { minHeight: 54, borderRadius: 17, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }, button_primary: { backgroundColor: colors.green }, button_secondary: { backgroundColor: colors.greenPale }, button_ghost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border }, button_orange: { backgroundColor: colors.orange }, buttonDisabled: { opacity: 0.5 }, buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: -0.3 }, buttonTextSecondary: { color: colors.greenDark }, buttonTextGhost: { color: colors.greenDark }, pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
-  card: { backgroundColor: colors.paper, borderRadius: 22, padding: 19, borderWidth: 1, borderColor: colors.border },
+  button: { minHeight: 50, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }, button_primary: { backgroundColor: colors.ink }, button_secondary: { backgroundColor: colors.greenPale }, button_ghost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#5E605B' }, button_orange: { backgroundColor: colors.orange }, buttonDisabled: { opacity: 0.45 }, buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800', letterSpacing: -0.3 }, buttonTextSecondary: { color: colors.greenDark }, buttonTextGhost: { color: colors.ink }, pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
+  card: { backgroundColor: colors.paper, borderRadius: 18, padding: 22, borderWidth: 1, borderColor: colors.border },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 5, marginBottom: 2 }, sectionTitle: { color: colors.ink, fontSize: 19, fontWeight: '800', letterSpacing: -0.6 }, sectionAction: { color: colors.green, fontSize: 13, fontWeight: '700' },
   avatar: { alignItems: 'center', justifyContent: 'center' }, avatarText: { color: colors.ink, fontWeight: '800' }, pointBadge: { backgroundColor: colors.greenPale, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 100, alignSelf: 'flex-start' }, pointBadgeLight: { backgroundColor: 'rgba(255,255,255,0.18)' }, pointBadgeText: { color: colors.greenDark, fontSize: 13, fontWeight: '800' }, pointBadgeTextLight: { color: '#FFFFFF' },
   field: { gap: 8 }, fieldLabel: { color: colors.ink, fontSize: 14, fontWeight: '800' }, input: { backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.border, minHeight: 54, borderRadius: 16, paddingHorizontal: 16, color: colors.ink, fontSize: 16 }, multiline: { minHeight: 100, textAlignVertical: 'top', paddingTop: 15 }, hint: { color: colors.muted, fontSize: 12, lineHeight: 18 },

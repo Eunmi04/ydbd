@@ -6,9 +6,10 @@ import { isSupabaseConfigured, supabase } from '../services/supabaseClient';
 import { mutate, readCreditSummary } from '../services/capstoneApi';
 import { authErrorMessage, authSetupMessage, loadOrRepairProfile, validateLogin, validateSignup } from '../services/authService';
 import { profileInput, saveMyProfile } from '../services/profileService';
+import { ROOM_CAPACITY } from '../services/roomPolicy';
 import type { AppData, CreditLedgerRecord, CreditReservationRecord, Profile, Room, RoomMemberRecord, RoomRecord, Settlement, SettlementItemRecord, SettlementRecord, User } from '../types';
 
-type NewRoom = Pick<Room, 'departure' | 'destination' | 'departureAt' | 'maxMembers' | 'estimatedFare'>;
+type NewRoom = Pick<Room, 'departure' | 'destination' | 'departureAt' | 'estimatedFare'>;
 type AppContextValue = {
   data: AppData;
   user: User | undefined;
@@ -318,21 +319,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!isValidEstimatedFare(input.estimatedFare)) throw new Error('예상 택시 요금은 안전한 범위의 양의 정수여야 해요.');
     if (new Date(input.departureAt).getTime() <= Date.now()) throw new Error('미래의 출발 시간을 선택해 주세요.');
     if (supabase) {
-      if (!Number.isInteger(input.maxMembers) || input.maxMembers < 2 || input.maxMembers > 4)
-        throw new Error('인원은 2~4명으로 선택해 주세요.');
       const created = await mutate<{ room_id: string }>('create_room', {
         p_departure_text: input.departure.trim(), p_destination_text: input.destination.trim(),
-        p_departure_at: input.departureAt, p_max_members: input.maxMembers,
+        p_departure_at: input.departureAt, p_max_members: ROOM_CAPACITY,
         p_estimated_fare: input.estimatedFare,
       });
       await refreshRooms().catch((cause) => console.warn('Room refresh after creation failed:', cause));
       return created.room_id;
     }
     if (!user) throw new Error('로그인이 필요합니다.');
-    const deposit = mockService.depositFor(input);
+    const deposit = mockService.depositFor({ ...input, maxMembers: ROOM_CAPACITY });
     if (balance < deposit) throw new Error('방을 만들 예치 포인트가 부족합니다. 지갑에서 충전해 주세요.');
     const id = `r${Date.now()}`;
-    const room: Room = { ...input, id, departure: input.departure.trim(), destination: input.destination.trim(), hostId: user.id, status: 'recruiting', members: [{ userId: user.id, boarded: false, deposit }] };
+    const room: Room = { ...input, id, maxMembers: ROOM_CAPACITY, departure: input.departure.trim(), destination: input.destination.trim(), hostId: user.id, status: 'recruiting', members: [{ userId: user.id, boarded: false, deposit }] };
     setData((previous) => ({
       ...previous,
       balances: { ...previous.balances, [user.id]: (previous.balances[user.id] ?? 0) - deposit },

@@ -25,7 +25,9 @@ try {
   assert.ok(beforeA >= 5000 && beforeB >= 5000, 'Each account needs at least 5000 TEST credits.');
   console.log('LOGIN_DEMO_MARKER_CREDIT_PASS');
   roomId = (await rpc(a, 'create_room', { p_departure_text: '시연 자동점검 출발', p_destination_text: '시연 자동점검 도착',
-    p_departure_at: new Date(Date.now() + 86400000).toISOString(), p_max_members: 2, p_estimated_fare: 10000 })).room_id;
+    p_departure_at: new Date(Date.now() + 86400000).toISOString(), p_max_members: 4, p_estimated_fare: 10000 })).room_id;
+  const capacity = check(await a.from('rooms').select('min_members,max_members').eq('id', roomId).single(), 'capacity');
+  assert.equal(capacity.min_members, 2); assert.equal(capacity.max_members, 4);
   await rpc(b, 'join_room', { p_room_id: roomId });
   console.log('CREATE_JOIN_PASS', roomId);
   await rpc(a, 'start_ready_check', { p_room_id: roomId });

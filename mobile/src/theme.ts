@@ -1,16 +1,17 @@
 export const colors = {
-  cream: '#F8F5EB',
+  cream: '#F7F4EC',
   paper: '#FFFEFA',
-  green: '#28734F',
-  greenDark: '#18573B',
-  greenPale: '#E8F3E7',
-  orange: '#F4A340',
-  orangePale: '#FFF0D9',
-  ink: '#1E3328',
-  muted: '#738277',
-  border: '#E2E8DC',
+  green: '#315D21',
+  greenDark: '#243F19',
+  greenPale: '#E8F6D8',
+  lime: '#85E648',
+  orange: '#B8ED83',
+  orangePale: '#EFF3E5',
+  ink: '#171816',
+  muted: '#777973',
+  border: '#E6E3DA',
   danger: '#B84D43',
-  shadow: '#254934',
+  shadow: '#37372D',
 };
 
 export const money = (value: number) => Math.round(value).toLocaleString('ko-KR');
