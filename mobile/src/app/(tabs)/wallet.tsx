@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { router } from 'expo-router'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { AppButton, Card, Header, Page } from '../../components/ui'
 import { useApp } from '../../state/AppContext'
 import { colors, money, shortDate } from '../../theme'
+import type { Settlement } from '../../types'
 
 const options = [5000, 10000, 20000, 30000]
 const typeLabel = {
@@ -10,6 +12,38 @@ const typeLabel = {
   deposit: '예치',
   use: '사용',
   refund: '환불',
+}
+
+function MonthlyRideSummary({ settlements, userId }: { settlements: Settlement[]; userId?: string }) {
+  const [monthsBack, setMonthsBack] = useState(0)
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1)
+  const nextMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1)
+  const rides = settlements.filter((item) => {
+    const date = new Date(item.createdAt)
+    return item.userId === userId && item.share > 0 && date >= monthStart && date < nextMonth
+  })
+  const spent = rides.reduce((total, item) => total + item.share, 0)
+  const estimable = rides.filter((item) => item.riderCount >= 2)
+  const saved = estimable.reduce((total, item) => total + Math.max(0, item.actualFare - item.share), 0)
+
+  return <Card style={styles.monthlyCard}>
+    <View style={styles.monthHeading}>
+      <Text style={styles.monthTitle}>월간 동승 기록</Text>
+      <View style={styles.monthControls}>
+        <Pressable accessibilityRole="button" accessibilityLabel="이전 달" onPress={() => setMonthsBack((value) => value + 1)} style={styles.monthControl}><Text style={styles.monthControlText}>‹</Text></Pressable>
+        <Text style={styles.monthText}>{monthStart.getFullYear()}년 {monthStart.getMonth() + 1}월</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="다음 달" disabled={monthsBack === 0} onPress={() => setMonthsBack((value) => Math.max(0, value - 1))} style={[styles.monthControl, monthsBack === 0 && styles.monthControlDisabled]}><Text style={styles.monthControlText}>›</Text></Pressable>
+      </View>
+    </View>
+    <View style={styles.monthStats}>
+      <View style={styles.monthStat}><Text style={styles.monthLabel}>동승 횟수</Text><Text style={styles.monthValue}>{rides.length}회</Text></View>
+      <View style={styles.monthStat}><Text style={styles.monthLabel}>분담액</Text><Text style={styles.monthValue}>{money(spent)}P</Text></View>
+    </View>
+    <Text style={styles.savings}>추정 절약액 {estimable.length ? `${money(saved)}원 상당` : '계산할 내역 없음'}</Text>
+    <Text style={styles.monthNote}>같은 요금의 택시를 혼자 탔다고 가정한 추정치예요. 분담액은 실제 결제가 아닌 TEST 크레딧 정산 기록입니다.</Text>
+    <AppButton label="건별 내역 더보기  ↗" variant="ghost" onPress={() => router.push('/(tabs)/my')} />
+  </Card>
 }
 
 export default function Wallet() {
@@ -62,6 +96,7 @@ export default function Wallet() {
             TEST 크레딧은 개발용 seed로만 지급합니다. 실제 충전·환급은 없습니다.
           </Text>
         </Card>
+        <MonthlyRideSummary settlements={data.settlements} userId={user?.id} />
         {message ? (
           <Card style={styles.success}>
             <Text style={styles.successText}>{message}</Text>
@@ -133,6 +168,7 @@ export default function Wallet() {
           style={{ marginTop: 20 }}
         />
       </Card>
+      <MonthlyRideSummary settlements={data.settlements} userId={user?.id} />
       {message ? (
         <Card style={styles.success}>
           <Text style={styles.successText}>✓ {message}</Text>
@@ -212,6 +248,20 @@ export default function Wallet() {
 }
 
 const styles = StyleSheet.create({
+  monthlyCard: { gap: 14 },
+  monthHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
+  monthTitle: { color: colors.ink, fontSize: 17, fontWeight: '800' },
+  monthControls: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  monthControl: { width: 28, height: 28, borderRadius: 10, backgroundColor: colors.greenPale, alignItems: 'center', justifyContent: 'center' },
+  monthControlDisabled: { opacity: 0.35 },
+  monthControlText: { color: colors.greenDark, fontSize: 22, lineHeight: 25 },
+  monthText: { color: colors.ink, fontSize: 12, fontWeight: '700' },
+  monthStats: { flexDirection: 'row', gap: 10 },
+  monthStat: { flex: 1, minWidth: 0, backgroundColor: colors.greenPale, padding: 13, borderRadius: 15, gap: 7 },
+  monthLabel: { color: colors.muted, fontSize: 12 },
+  monthValue: { color: colors.ink, fontSize: 20, fontWeight: '800' },
+  savings: { color: colors.greenDark, fontSize: 14, fontWeight: '800' },
+  monthNote: { color: colors.muted, fontSize: 11, lineHeight: 17 },
   balance: {
     backgroundColor: colors.green,
     borderColor: colors.green,
