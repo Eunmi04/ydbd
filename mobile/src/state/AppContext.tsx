@@ -4,12 +4,14 @@ import { mockService } from '../services/mockService';
 import { isValidEstimatedFare } from '../services/creditPolicy';
 import { isSupabaseConfigured, supabase } from '../services/supabaseClient';
 import { mutate, readCreditSummary } from '../services/capstoneApi';
+import { coordinates } from '../services/routeReuse';
 import { authErrorMessage, authSetupMessage, loadOrRepairProfile, validateLogin, validateSignup } from '../services/authService';
 import { profileInput, saveMyProfile } from '../services/profileService';
 import { ROOM_CAPACITY } from '../services/roomPolicy';
 import type { AppData, CreditLedgerRecord, CreditReservationRecord, Profile, Room, RoomMemberRecord, RoomRecord, Settlement, SettlementItemRecord, SettlementRecord, User } from '../types';
 
-type NewRoom = Pick<Room, 'departure' | 'destination' | 'departureAt' | 'estimatedFare'>;
+type NewRoom = Pick<Room, 'departure' | 'destination' | 'departureAt' | 'estimatedFare' |
+  'departureCoordinates' | 'destinationCoordinates'>;
 type AppContextValue = {
   data: AppData;
   user: User | undefined;
@@ -66,6 +68,8 @@ function toLegacyRoom(record: RoomRecord, members: RoomMemberRecord[], reservati
   return {
     id: record.id, hostId: record.host_id,
     departure: record.departure_text, destination: record.destination_text,
+    departureCoordinates: coordinates(record.departure_lat, record.departure_lng),
+    destinationCoordinates: coordinates(record.destination_lat, record.destination_lng),
     departureAt: record.departure_at, maxMembers: record.max_members,
     estimatedFare: record.estimated_fare, status: legacyStatus(record.status),
     dbStatus: record.status,
@@ -319,10 +323,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!isValidEstimatedFare(input.estimatedFare)) throw new Error('예상 택시 요금은 안전한 범위의 양의 정수여야 해요.');
     if (new Date(input.departureAt).getTime() <= Date.now()) throw new Error('미래의 출발 시간을 선택해 주세요.');
     if (supabase) {
-      const created = await mutate<{ room_id: string }>('create_room', {
+      const { departureCoordinates, destinationCoordinates } = input;
+      const hasCoordinates = Boolean(departureCoordinates || destinationCoordinates);
+      const created = await mutate<{ room_id: string }>(hasCoordinates ? 'create_room_with_coordinates' : 'create_room', {
         p_departure_text: input.departure.trim(), p_destination_text: input.destination.trim(),
         p_departure_at: input.departureAt, p_max_members: ROOM_CAPACITY,
         p_estimated_fare: input.estimatedFare,
+        ...(hasCoordinates ? {
+          p_departure_lat: departureCoordinates?.latitude ?? null,
+          p_departure_lng: departureCoordinates?.longitude ?? null,
+          p_destination_lat: destinationCoordinates?.latitude ?? null,
+          p_destination_lng: destinationCoordinates?.longitude ?? null,
+        } : {}),
       });
       await refreshRooms().catch((cause) => console.warn('Room refresh after creation failed:', cause));
       return created.room_id;

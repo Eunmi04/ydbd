@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import type { Coordinates } from '../types';
 
 declare global {
   interface Window {
@@ -7,26 +8,35 @@ declare global {
   }
 }
 
-type KakaoMapProps = { departure: string; destination: string };
+type KakaoMapProps = {
+  departure: string;
+  destination: string;
+  departureCoordinates?: Coordinates;
+  destinationCoordinates?: Coordinates;
+};
 
-export default function KakaoMap({ departure, destination }: KakaoMapProps) {
+export default function KakaoMap({ departure, destination, departureCoordinates, destinationCoordinates }: KakaoMapProps) {
   const mapElement = useRef<HTMLDivElement | null>(null);
-  const [message, setMessage] = useState('카카오맵을 불러오는 중...');
-  const [ready, setReady] = useState(false);
+  const departureLat = departureCoordinates?.latitude;
+  const departureLng = departureCoordinates?.longitude;
+  const destinationLat = destinationCoordinates?.latitude;
+  const destinationLng = destinationCoordinates?.longitude;
+  const routeKey = JSON.stringify([departure, destination, departureLat, departureLng, destinationLat, destinationLng]);
+  const [message, setMessage] = useState('');
+  const [readyRoute, setReadyRoute] = useState<string>();
+  const ready = readyRoute === routeKey;
 
   useEffect(() => {
     let cancelled = false;
     let markers: any[] = [];
     let polylines: any[] = [];
 
-    setReady(false);
-
     const loadMap = async () => {
       const key = process.env.EXPO_PUBLIC_KAKAO_MAP_KEY;
 
       if (!key) {
         setMessage('카카오맵 키를 찾을 수 없어요. .env 파일을 확인해 주세요.');
-        setReady(true);
+        setReadyRoute(routeKey);
         return;
       }
 
@@ -70,13 +80,13 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
           const places = new kakao.maps.services.Places();
           const bounds = new kakao.maps.LatLngBounds();
           const searches = [
-            { keyword: departure.trim(), label: '출발지' },
-            { keyword: destination.trim(), label: '도착지' },
+            { keyword: departure.trim(), latitude: departureLat, longitude: departureLng },
+            { keyword: destination.trim(), latitude: destinationLat, longitude: destinationLng },
           ];
 
           if (!searches[0].keyword || !searches[1].keyword) {
             setMessage('출발지와 도착지를 모두 입력해 주세요.');
-            setReady(true);
+            setReadyRoute(routeKey);
             return;
           }
 
@@ -95,10 +105,11 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
             });
 
           try {
-            const [startPlace, endPlace] = await Promise.all([
-              searchPlace(searches[0].keyword),
-              searchPlace(searches[1].keyword),
-            ]);
+            const [startPlace, endPlace] = await Promise.all(searches.map(({ keyword, latitude, longitude }) =>
+              latitude !== undefined && longitude !== undefined
+                ? { x: longitude, y: latitude, place_name: keyword }
+                : searchPlace(keyword),
+            ));
 
             if (cancelled) return;
 
@@ -200,7 +211,7 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
 
             map.setBounds(bounds);
           } finally {
-            if (!cancelled) setReady(true);
+            if (!cancelled) setReadyRoute(routeKey);
           }
         });
       } catch {
@@ -208,7 +219,7 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
           setMessage(
             '지도를 불러오지 못했어요. 카카오맵 키와 등록 도메인을 확인해 주세요.',
           );
-          setReady(true);
+          setReadyRoute(routeKey);
         }
       }
     };
@@ -220,14 +231,14 @@ export default function KakaoMap({ departure, destination }: KakaoMapProps) {
       markers.forEach((marker) => marker.setMap(null));
       polylines.forEach((polyline) => polyline.setMap(null));
     };
-  }, [departure, destination]);
+  }, [departure, destination, departureLat, departureLng, destinationLat, destinationLng, routeKey]);
 
   return (
     <View style={styles.container}>
       <View ref={mapElement as any} style={styles.map} collapsable={false} />
       <Text style={styles.message}>
         {ready ? '📍 ' : 'ℹ️ '}
-        {message}
+        {ready ? message : '카카오맵을 불러오는 중...'}
       </Text>
     </View>
   );

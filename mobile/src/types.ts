@@ -1,10 +1,13 @@
 export type User = { id: string; nickname: string; email: string; password?: string; color: string };
 export type RoomStatus = 'recruiting' | 'confirmed' | 'settled' | 'other';
+export type Coordinates = { latitude: number; longitude: number };
 export type RoomMember = { userId: string; boarded: boolean; deposit: number; ready?: boolean; boardedStatus?: BoardedStatus };
 export type Room = {
   id: string;
   departure: string;
   destination: string;
+  departureCoordinates?: Coordinates;
+  destinationCoordinates?: Coordinates;
   departureAt: string;
   maxMembers: number;
   estimatedFare: number;
