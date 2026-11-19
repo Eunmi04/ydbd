@@ -1,4 +1,3 @@
-# 2026-10-22 화면 개편
 
 ## 변경 사항
 
@@ -26,10 +25,8 @@
 
 ## 검증 범위
 
-타입 검사와 수정 파일의 린트, 기존 인증·프로필·크레딧 테스트 13개가 통과했다. 웹 정적 빌드도 통과했다.
+타입 검사와 수정 파일의 린트, 기존 인증·프로필·크레딧 테스트 13개를 수행한다.
 웹 브라우저에서 별도 테스트 계정으로 로그인·설정 저장·새로고침 후 유지·4명 방 생성과
-실제 DB 저장(`min_members=2`, `max_members=4`)·목록 표시·작은 화면의 가로 넘침 없음을 확인했다.
-확인에 사용한 방은 취소했다. 스크린샷은 `tmp/design-home-desktop.png`, `tmp/design-home-mobile.png`,
-`tmp/design-create-desktop.png`, `tmp/design-detail-desktop.png`, `tmp/design-settings.png`에 있다.
+실제 DB 저장·목록 표시·작은 화면의 가로 넘침을 확인한다.
 015 SQL은 로컬에 작성한 파일이며 관리자 적용 전까지 원격 DB에 적용했다고 간주하지 않는다.
 전체 린트에는 기존 `KakaoMap.web.tsx:22` 오류와 `mockService.ts:252` 경고가 남아 있다.

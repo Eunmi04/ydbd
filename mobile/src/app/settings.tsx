@@ -1,6 +1,7 @@
 import { Text, StyleSheet } from 'react-native';
 import { Card, InfoRow, Page } from '../components/ui';
 import { ProfileEditor } from '../components/ProfileEditor';
+import { RideInviteSettings } from '../components/RideInviteSettings';
 import { useApp } from '../state/AppContext';
 import { verificationLabel } from '../services/profileService';
 import { colors } from '../theme';
@@ -15,6 +16,7 @@ export default function Settings() {
     </Card>
     {user ? <ProfileEditor key={user.id} nickname={profile?.nickname ?? user.nickname}
       school={profile?.school_name ?? ''} onSave={updateProfile} /> : null}
+    {mode === 'supabase' && user ? <RideInviteSettings key={user.id} userId={user.id} /> : null}
   </Page>;
 }
 const styles = StyleSheet.create({ heading: { color: colors.ink, fontSize: 18, fontWeight: '800', marginBottom: 14 },

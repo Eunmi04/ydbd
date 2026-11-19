@@ -1,15 +1,18 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { AppButton, Card, EmptyState, ErrorNotice, Header, Page, RoomCard } from '../../components/ui';
 import { TaxiDoodle } from '../../components/TaxiDoodle';
 import { useServiceSync } from '../../hooks/useServiceSync';
+import { useRideQuery } from '../../hooks/useRideQuery';
+import { getRecentRoutes } from '../../services/rideReuseService';
 import { useApp } from '../../state/AppContext';
 import { colors, money, shortDate } from '../../theme';
 
 export default function Home() {
   const syncError = useServiceSync();
   const { data, user, balance, mode } = useApp();
+  const recent = useRideQuery(mode === 'supabase' ? user?.id : undefined, getRecentRoutes);
   const { width } = useWindowDimensions();
   const desktop = Platform.OS === 'web' && width >= 850;
   const [departure, setDeparture] = useState('');
@@ -28,12 +31,34 @@ export default function Home() {
       </View>
       <View style={[styles.heroArt, desktop && { flex: 1.1, width: 'auto' }]}><TaxiDoodle /></View>
     </View>
-    <Card style={[styles.search, desktop && styles.searchDesktop]}>
-      <View style={styles.searchField}><Text style={styles.searchLabel}>◎  출발지</Text><TextInput accessibilityLabel="찾을 출발지" value={departure} onChangeText={setDeparture} placeholder="어디에서 출발하나요?" placeholderTextColor="#989A94" style={styles.searchInput} /></View>
+    <Card style={[styles.search, desktop && styles.searchDesktop, desktop && Boolean(recent.data?.length) && styles.searchWithRoutes]}>
+      <View style={styles.searchField}>
+        <Text style={styles.searchLabel}>◎  출발지</Text>
+        <TextInput accessibilityLabel="찾을 출발지" value={departure} onChangeText={setDeparture} placeholder="어디에서 출발하나요?" placeholderTextColor="#989A94" style={styles.searchInput} />
+        {recent.data?.length ? <View style={styles.recent}>
+          <Text style={styles.searchLabel}>최근 이용 경로</Text>
+          {recent.data.map((route) => <View key={route.room_id} style={styles.recentRow}>
+            <Pressable accessibilityRole="button" style={styles.recentRoute} onPress={() =>
+              router.push({ pathname: '/room/new', params: { sourceRoom: route.room_id } })}>
+              <Text style={styles.smallTitle}>{route.departure} → {route.destination}</Text>
+              <Text style={styles.helper}>{shortDate(route.boarded_at)}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={`${route.departure}에서 ${route.destination}까지 모집 중인 방 찾기`}
+              style={styles.recentSearch} onPress={() =>
+                router.push({ pathname: '/(tabs)/rooms', params: { from: route.departure, to: route.destination } })}>
+              <Text style={styles.recentSearchText}>방 찾기</Text>
+            </Pressable>
+          </View>)}
+        </View> : null}
+      </View>
       <View style={styles.searchField}><Text style={styles.searchLabel}>♧  도착지</Text><TextInput accessibilityLabel="찾을 도착지" value={destination} onChangeText={setDestination} placeholder="어디로 가시나요?" placeholderTextColor="#989A94" style={styles.searchInput} /></View>
       <View style={styles.capacity}><Text style={styles.searchLabel}>☺  함께 타는 인원</Text><Text style={styles.searchHint}>최대 4명 · 2명부터 출발</Text></View>
       <AppButton label="같이 탈 방 찾기  ↗" onPress={search} />
     </Card>
+    {recent.error ? <View style={styles.recentRetry}>
+      <Text style={styles.helper}>{recent.error}</Text>
+      <AppButton label="최근 경로 다시 불러오기" variant="ghost" onPress={recent.reload} />
+    </View> : null}
     <View style={styles.section}><Header title="지금 모집 중인 방" action="더보기" onAction={() => router.push('/(tabs)/rooms')} />
       {rooms.length ? <View style={[styles.roomGrid, desktop && styles.roomGridDesktop]}>{rooms.map(room => <View key={room.id} style={styles.roomCell}><RoomCard room={room} onPress={() => router.push({ pathname: '/room/[id]', params: { id: room.id } })} /></View>)}</View>
         : <EmptyState title="첫 번째 동승을 시작해 볼까요?" message="같은 방향으로 갈 사람을 기다리는 방을 만들어 보세요." action="방 만들기" onAction={() => router.push('/room/new')} />}
@@ -54,7 +79,12 @@ const styles = StyleSheet.create({
   dot: { color: colors.lime }, heroDescription: { color: colors.ink, fontSize: 18, lineHeight: 30, marginTop: 20 },
   heroActions: { flexDirection: 'row', maxWidth: 385, gap: 12, marginTop: 30 }, heroArt: { width: '100%', minWidth: 0 },
   search: { gap: 20, padding: 25, marginTop: 5, borderWidth: 0 }, searchDesktop: { flexDirection: 'row', alignItems: 'center' },
+  searchWithRoutes: { alignItems: 'flex-start' },
   searchField: { flex: 1, gap: 10 }, searchLabel: { fontSize: 13, fontWeight: '800', color: colors.ink }, searchInput: { fontSize: 13, color: colors.ink, paddingVertical: 5, minHeight: 32 },
+  recent: { gap: 6 }, recentRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, backgroundColor: colors.greenPale },
+  recentRoute: { flex: 1, paddingVertical: 7, paddingLeft: 10 }, recentSearch: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 9 },
+  recentSearchText: { color: colors.green, fontSize: 11, fontWeight: '800' },
+  recentRetry: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   capacity: { gap: 14, paddingRight: 12 }, searchHint: { color: colors.muted, fontSize: 12 },
   section: { gap: 18, marginTop: 27 }, roomGrid: { gap: 16 }, roomGridDesktop: { flexDirection: 'row' }, roomCell: { flex: 1, minWidth: 0 },
   overview: { gap: 22, marginTop: 22 }, wallet: { flex: 1, backgroundColor: colors.greenPale, gap: 14 }, joined: { flex: 1.6, gap: 12 },

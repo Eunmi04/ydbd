@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
-import { useLocalSearchParams } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { Card, EmptyState, InfoRow, Page } from '../../components/ui'
+import { AppButton, Card, EmptyState, InfoRow, Page } from '../../components/ui'
 import { useApp } from '../../state/AppContext'
 import { colors, money, shortDate } from '../../theme'
 
@@ -129,6 +129,11 @@ export default function HistoryDetailScreen() {
           <Text style={styles.muted}>확인할 수 있는 탑승자 정보가 없어요.</Text>
         )}
       </Card>
+
+      {mode === 'supabase' && roomId && record?.status === 'COMPLETED' && myItem?.boarded ? (
+        <AppButton label="이전 동승자와 다시 타기" onPress={() =>
+          router.push({ pathname: '/room/new', params: { sourceRoom: roomId, reinvite: '1' } })} />
+      ) : null}
 
       <Text style={styles.note}>
         실제 결제·송금이 아닌 앱의 정산 기록입니다.

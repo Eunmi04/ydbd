@@ -10,6 +10,7 @@ import {
   Page,
 } from '../../components/ui'
 import { useApp } from '../../state/AppContext'
+import { ReceivedRideInvites } from '../../components/ReceivedRideInvites'
 import { colors, money, shortDate } from '../../theme'
 import { authErrorMessage } from '../../services/authService'
 import {
@@ -118,6 +119,7 @@ export default function MyPage() {
           ))
         )}
       </Card>
+      {mode === 'supabase' && user ? <ReceivedRideInvites key={user.id} userId={user.id} /> : null}
       <Header title="설정" />
       <Card style={{ paddingVertical: 5 }}>
         <Pressable accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.menu}>

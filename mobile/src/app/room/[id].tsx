@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { AppButton, Avatar, Card, EmptyState, ErrorNotice, Header, InfoRow, Page, PointBadge } from '../../components/ui';
+import { AppButton, Avatar, Card, EmptyState, ErrorNotice, Header, InfoRow, MapPreview, Page, PointBadge } from '../../components/ui';
 import KakaoMap from '../../components/KakaoMap.web';
 import { useApp } from '../../state/AppContext';
 import { calculateReserveAmount } from '../../services/creditPolicy';
@@ -85,7 +85,12 @@ export default function RoomDetail() {
     {error ? <ErrorNotice message={error} /> : null}
     {mode === 'mock' && room.status === 'confirmed' ? <Text style={styles.helper}>탑승을 완료했다면 아래 버튼으로 정산을 시작하세요.</Text> : null}
     </View>
-    <View style={{ flex: desktop ? 1 : undefined, gap: 20, minWidth: 0 }}><Card style={{ padding: 10 }}><KakaoMap departure={room.departure} destination={room.destination} /></Card><TaxiDoodle compact /><View style={{ gap: 10 }}>{footer}</View></View>
+    <View style={{ flex: desktop ? 1 : undefined, gap: 20, minWidth: 0 }}><Card style={{ padding: 10 }}>
+      {Platform.OS === 'web'
+        ? <KakaoMap departure={room.departure} destination={room.destination}
+            departureCoordinates={room.departureCoordinates} destinationCoordinates={room.destinationCoordinates} />
+        : <MapPreview departure={room.departure} destination={room.destination} />}
+    </Card><TaxiDoodle compact /><View style={{ gap: 10 }}>{footer}</View></View>
     </View>
   </Page>;
 }
