@@ -1,43 +1,55 @@
-import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import type { Coordinates } from '../types';
+import { useEffect, useRef, useState } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
+import type { Coordinates } from '../types'
 
 declare global {
   interface Window {
-    kakao?: any;
+    kakao?: any
   }
 }
 
 type KakaoMapProps = {
-  departure: string;
-  destination: string;
-  departureCoordinates?: Coordinates;
-  destinationCoordinates?: Coordinates;
-};
+  departure: string
+  destination: string
+  departureCoordinates?: Coordinates
+  destinationCoordinates?: Coordinates
+}
 
-export default function KakaoMap({ departure, destination, departureCoordinates, destinationCoordinates }: KakaoMapProps) {
-  const mapElement = useRef<HTMLDivElement | null>(null);
-  const departureLat = departureCoordinates?.latitude;
-  const departureLng = departureCoordinates?.longitude;
-  const destinationLat = destinationCoordinates?.latitude;
-  const destinationLng = destinationCoordinates?.longitude;
-  const routeKey = JSON.stringify([departure, destination, departureLat, departureLng, destinationLat, destinationLng]);
-  const [message, setMessage] = useState('');
-  const [readyRoute, setReadyRoute] = useState<string>();
-  const ready = readyRoute === routeKey;
+export default function KakaoMap({
+  departure,
+  destination,
+  departureCoordinates,
+  destinationCoordinates,
+}: KakaoMapProps) {
+  const mapElement = useRef<HTMLDivElement | null>(null)
+  const departureLat = departureCoordinates?.latitude
+  const departureLng = departureCoordinates?.longitude
+  const destinationLat = destinationCoordinates?.latitude
+  const destinationLng = destinationCoordinates?.longitude
+  const routeKey = JSON.stringify([
+    departure,
+    destination,
+    departureLat,
+    departureLng,
+    destinationLat,
+    destinationLng,
+  ])
+  const [message, setMessage] = useState('')
+  const [readyRoute, setReadyRoute] = useState<string>()
+  const ready = readyRoute === routeKey
 
   useEffect(() => {
-    let cancelled = false;
-    let markers: any[] = [];
-    let polylines: any[] = [];
+    let cancelled = false
+    let markers: any[] = []
+    let polylines: any[] = []
 
     const loadMap = async () => {
-      const key = process.env.EXPO_PUBLIC_KAKAO_MAP_KEY;
+      const key = process.env.EXPO_PUBLIC_KAKAO_MAP_KEY
 
       if (!key) {
-        setMessage('카카오맵 키를 찾을 수 없어요. .env 파일을 확인해 주세요.');
-        setReadyRoute(routeKey);
-        return;
+        setMessage('카카오맵 키를 찾을 수 없어요. .env 파일을 확인해 주세요.')
+        setReadyRoute(routeKey)
+        return
       }
 
       try {
@@ -45,49 +57,57 @@ export default function KakaoMap({ departure, destination, departureCoordinates,
           await new Promise<void>((resolve, reject) => {
             const existing = document.querySelector<HTMLScriptElement>(
               'script[data-kakao-map-sdk]',
-            );
+            )
 
             if (existing && window.kakao?.maps?.services) {
-              resolve();
-              return;
+              resolve()
+              return
             }
 
-            const script = existing ?? document.createElement('script');
-            script.addEventListener('load', () => resolve(), { once: true });
+            const script = existing ?? document.createElement('script')
+            script.addEventListener('load', () => resolve(), { once: true })
             script.addEventListener(
               'error',
               () => reject(new Error('SDK load failed')),
               { once: true },
-            );
+            )
 
             if (!existing) {
-              script.dataset.kakaoMapSdk = 'true';
-              script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&autoload=false&libraries=services`;
-              document.head.appendChild(script);
+              script.dataset.kakaoMapSdk = 'true'
+              script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&autoload=false&libraries=services`
+              document.head.appendChild(script)
             }
-          });
+          })
         }
 
         window.kakao.maps.load(async () => {
-          if (cancelled || !mapElement.current) return;
+          if (cancelled || !mapElement.current) return
 
-          const kakao = window.kakao;
+          const kakao = window.kakao
           const map = new kakao.maps.Map(mapElement.current, {
             center: new kakao.maps.LatLng(37.5665, 126.978),
             level: 7,
-          });
+          })
 
-          const places = new kakao.maps.services.Places();
-          const bounds = new kakao.maps.LatLngBounds();
+          const places = new kakao.maps.services.Places()
+          const bounds = new kakao.maps.LatLngBounds()
           const searches = [
-            { keyword: departure.trim(), latitude: departureLat, longitude: departureLng },
-            { keyword: destination.trim(), latitude: destinationLat, longitude: destinationLng },
-          ];
+            {
+              keyword: departure.trim(),
+              latitude: departureLat,
+              longitude: departureLng,
+            },
+            {
+              keyword: destination.trim(),
+              latitude: destinationLat,
+              longitude: destinationLng,
+            },
+          ]
 
           if (!searches[0].keyword || !searches[1].keyword) {
-            setMessage('출발지와 도착지를 모두 입력해 주세요.');
-            setReadyRoute(routeKey);
-            return;
+            setMessage('출발지와 도착지를 모두 입력해 주세요.')
+            setReadyRoute(routeKey)
+            return
           }
 
           const searchPlace = (keyword: string) =>
@@ -97,33 +117,35 @@ export default function KakaoMap({ departure, destination, departureCoordinates,
                   status === kakao.maps.services.Status.OK &&
                   result.length > 0
                 ) {
-                  resolve(result[0]);
+                  resolve(result[0])
                 } else {
-                  reject(new Error(`장소를 찾지 못했습니다: ${keyword}`));
+                  reject(new Error(`장소를 찾지 못했습니다: ${keyword}`))
                 }
-              });
-            });
+              })
+            })
 
           try {
-            const [startPlace, endPlace] = await Promise.all(searches.map(({ keyword, latitude, longitude }) =>
-              latitude !== undefined && longitude !== undefined
-                ? { x: longitude, y: latitude, place_name: keyword }
-                : searchPlace(keyword),
-            ));
+            const [startPlace, endPlace] = await Promise.all(
+              searches.map(({ keyword, latitude, longitude }) =>
+                latitude !== undefined && longitude !== undefined
+                  ? { x: longitude, y: latitude, place_name: keyword }
+                  : searchPlace(keyword),
+              ),
+            )
 
-            if (cancelled) return;
+            if (cancelled) return
 
             const start = {
               x: Number(startPlace.x),
               y: Number(startPlace.y),
-            };
+            }
             const end = {
               x: Number(endPlace.x),
               y: Number(endPlace.y),
-            };
+            }
 
-            const startPosition = new kakao.maps.LatLng(start.y, start.x);
-            const endPosition = new kakao.maps.LatLng(end.y, end.x);
+            const startPosition = new kakao.maps.LatLng(start.y, start.x)
+            const endPosition = new kakao.maps.LatLng(end.y, end.x)
 
             markers.push(
               new kakao.maps.Marker({
@@ -136,53 +158,56 @@ export default function KakaoMap({ departure, destination, departureCoordinates,
                 position: endPosition,
                 title: `도착지: ${endPlace.place_name}`,
               }),
-            );
+            )
 
-            bounds.extend(startPosition);
-            bounds.extend(endPosition);
+            bounds.extend(startPosition)
+            bounds.extend(endPosition)
 
-            setMessage('자동차 경로를 불러오는 중...');
+            setMessage('자동차 경로를 불러오는 중...')
 
             const params = new URLSearchParams({
               origin: `${start.x},${start.y}`,
               destination: `${end.x},${end.y}`,
-            });
+            })
+
+            const apiUrl =
+              process.env.EXPO_PUBLIC_ROUTE_API_URL || 'http://localhost:3000'
 
             const response = await fetch(
-              `http://localhost:3000/api/directions?${params.toString()}`,
-            );
-            const data = await response.json();
+              `${apiUrl}/api/directions?${params.toString()}`,
+            )
+            const data = await response.json()
 
             if (!response.ok) {
-              throw new Error(data.error || '자동차 경로 요청에 실패했습니다.');
+              throw new Error(data.error || '자동차 경로 요청에 실패했습니다.')
             }
 
-            if (cancelled) return;
+            if (cancelled) return
 
             const roads =
               data.routes?.[0]?.sections?.flatMap(
                 (section: any) => section.roads ?? [],
-              ) ?? [];
+              ) ?? []
 
-            const path: any[] = [];
+            const path: any[] = []
 
             roads.forEach((road: any) => {
-              const vertexes = road.vertexes ?? [];
+              const vertexes = road.vertexes ?? []
 
               for (let i = 0; i + 1 < vertexes.length; i += 2) {
-                const longitude = Number(vertexes[i]);
-                const latitude = Number(vertexes[i + 1]);
+                const longitude = Number(vertexes[i])
+                const latitude = Number(vertexes[i + 1])
 
                 if (Number.isFinite(longitude) && Number.isFinite(latitude)) {
-                  path.push(new kakao.maps.LatLng(latitude, longitude));
+                  path.push(new kakao.maps.LatLng(latitude, longitude))
                 }
               }
-            });
+            })
 
             if (path.length < 2) {
               throw new Error(
                 '자동차 경로가 없어요. 출발지와 도착지를 확인해 주세요.',
-              );
+              )
             }
 
             const polyline = new kakao.maps.Polyline({
@@ -191,47 +216,55 @@ export default function KakaoMap({ departure, destination, departureCoordinates,
               strokeColor: '#2878FF',
               strokeOpacity: 0.9,
               strokeStyle: 'solid',
-            });
+            })
 
-            polyline.setMap(map);
-            polylines.push(polyline);
+            polyline.setMap(map)
+            polylines.push(polyline)
 
-            path.forEach((point) => bounds.extend(point));
-            map.setBounds(bounds);
+            path.forEach((point) => bounds.extend(point))
+            map.setBounds(bounds)
 
-            setMessage('출발지부터 도착지까지 택시 경로를 표시했어요!');
+            setMessage('출발지부터 도착지까지 택시 경로를 표시했어요!')
           } catch (error) {
-            if (cancelled) return;
+            if (cancelled) return
 
             setMessage(
               error instanceof Error
                 ? error.message
                 : '자동차 경로를 불러오지 못했어요.',
-            );
+            )
 
-            map.setBounds(bounds);
+            map.setBounds(bounds)
           } finally {
-            if (!cancelled) setReadyRoute(routeKey);
+            if (!cancelled) setReadyRoute(routeKey)
           }
-        });
+        })
       } catch {
         if (!cancelled) {
           setMessage(
             '지도를 불러오지 못했어요. 카카오맵 키와 등록 도메인을 확인해 주세요.',
-          );
-          setReadyRoute(routeKey);
+          )
+          setReadyRoute(routeKey)
         }
       }
-    };
+    }
 
-    void loadMap();
+    void loadMap()
 
     return () => {
-      cancelled = true;
-      markers.forEach((marker) => marker.setMap(null));
-      polylines.forEach((polyline) => polyline.setMap(null));
-    };
-  }, [departure, destination, departureLat, departureLng, destinationLat, destinationLng, routeKey]);
+      cancelled = true
+      markers.forEach((marker) => marker.setMap(null))
+      polylines.forEach((polyline) => polyline.setMap(null))
+    }
+  }, [
+    departure,
+    destination,
+    departureLat,
+    departureLng,
+    destinationLat,
+    destinationLng,
+    routeKey,
+  ])
 
   return (
     <View style={styles.container}>
@@ -241,11 +274,11 @@ export default function KakaoMap({ departure, destination, departureCoordinates,
         {ready ? message : '카카오맵을 불러오는 중...'}
       </Text>
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
   container: { width: '100%', gap: 8 },
   map: { width: '100%', height: 280, borderRadius: 16, overflow: 'hidden' },
   message: { color: '#52705A', fontSize: 12, lineHeight: 18 },
-});
+})
